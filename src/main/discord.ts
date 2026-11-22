@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import net from 'node:net'
 import { join } from 'node:path'
 import type { PlayerState } from '@shared/types'
@@ -32,6 +33,18 @@ class Presence {
   private lastKey = ''
   private lastSent = 0
   private timer: ReturnType<typeof setTimeout> | undefined
+  private partyCode: string | null = null      // hosting a listening party: show a Join button on the profile
+  private partySize = 1
+  private lastState: PlayerState | null = null
+  /** a friend pressed Join on our activity: Discord hands us the room code (the "secret") */
+  onJoin: ((secret: string) => void) | null = null
+
+  setParty(code: string | null, size = 1) {
+    const n = code ? Math.max(1, size) : 1
+    if (code === this.partyCode && n === this.partySize) return
+    this.partyCode = code; this.partySize = n
+    if (this.lastState) this.update(this.lastState)
+  }
 
   configure(enabled: boolean, clientId: string) {
     const id = (BUILT_IN_APP_ID || clientId).trim()
@@ -60,7 +73,12 @@ class Presence {
         if (this.buf.length < 8 + len) break
         const msg = (() => { try { return JSON.parse(this.buf.subarray(8, 8 + len).toString()) } catch { return null } })()
         this.buf = this.buf.subarray(8 + len)
-        if (msg?.evt === 'READY') { this.ready = true; this.flush(true) }
+        if (msg?.evt === 'READY') {
+          this.ready = true
+          try { s.write(frame(1, { cmd: 'SUBSCRIBE', evt: 'ACTIVITY_JOIN', args: {}, nonce: String(Math.random()) })) } catch { /* ignore */ }   // tell us when someone presses Join
+          this.flush(true)
+        }
+        if (msg?.evt === 'ACTIVITY_JOIN' && typeof msg?.data?.secret === 'string') { try { this.onJoin?.(msg.data.secret) } catch { /* ignore */ } }
       }
     })
     const gone = () => {
@@ -79,6 +97,7 @@ class Presence {
   }
 
   update(s: PlayerState) {
+    this.lastState = s
     if (!this.enabled) return
     let activity: object | null = null
     if (s.videoId && s.title && !s.paused && !s.adActive) {
@@ -88,7 +107,12 @@ class Presence {
         details: (cleanTitle(s.title, s.artist) || s.title).slice(0, 120),     // same cleaned title Triad shows
         state: (s.artist || 'Unknown artist').slice(0, 120),
         timestamps: s.duration > 0 ? { start, end: start + Math.round(s.duration) * 1000 } : { start },
-        assets: { ...(s.artwork ? { large_image: s.artwork, large_text: s.album || s.title } : {}) }
+        assets: { ...(s.artwork ? { large_image: s.artwork, large_text: s.album || s.title } : {}) },
+        // hosting a party: friends see a Join button; the secret is the room code (only the person pressing Join receives it)
+        ...(this.partyCode ? {
+          party: { id: 'triad-' + createHash('sha256').update(this.partyCode).digest('hex').slice(0, 16), size: [this.partySize, Math.max(10, this.partySize)] },
+          secrets: { join: this.partyCode }
+        } : {})
       }
     }
     this.activity = activity

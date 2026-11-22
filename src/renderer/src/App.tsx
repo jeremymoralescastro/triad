@@ -9,6 +9,7 @@ import { LyricsPanel } from '@/components/LyricsPanel'
 import { Wallpaper } from '@/components/Wallpaper'
 import { PlayerBar } from '@/components/PlayerBar'
 import { AccountBadge } from '@/components/AccountBadge'
+import { PartyButton } from '@/components/PartyButton'
 import { ShelfView } from '@/views/ShelfView'
 import { ArtistView } from '@/views/ArtistView'
 import { HomeStats } from '@/components/HomeStats'
@@ -63,12 +64,13 @@ export default function App() {
   return (
     <div className="relative flex h-full flex-col">
       <Wallpaper />
-      {/* top bar = window drag region; the right 144px stays free for the Windows caption buttons */}
-      <header className="drag relative flex h-14 shrink-0 items-center gap-3 pl-4 pr-36">
+      {/* top bar = window drag region; Windows keeps the right 144px free for its caption buttons, Mac the left 96px for its traffic lights */}
+      <header className={`drag relative flex h-14 shrink-0 items-center gap-3 ${/Mac/i.test(navigator.userAgent) ? 'pl-24 pr-4' : 'pl-4 pr-36'}`}>
         <BackendMenu />
         <button aria-label="Home" onClick={() => setView({ name: 'home' })}
           className={`no-drag glass glass-hover grid size-11 place-items-center rounded-full ${view.name === 'home' ? 'text-accent' : 'text-white/85 hover:text-white'}`}><House size={21} /></button>
         <SearchBox query={query} setQuery={setQuery} onSubmit={(q) => { setSubmitted(q); setView({ name: 'search' }) }} />
+        <PartyButton />
         <AccountBadge />
       </header>
 

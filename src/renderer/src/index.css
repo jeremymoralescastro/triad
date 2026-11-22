@@ -102,6 +102,8 @@ input[type="range"].slider:hover::-webkit-slider-thumb, input[type="range"].slid
 @media (prefers-reduced-motion: reduce) { .eq-drift-a, .eq-drift-b, .eq-drift-c, .eq-bob { animation: none } }
 
 /* the next song slides forward into the "now playing" spot, and a new one peeks in behind it */
+@keyframes set-in { from { opacity: 0; transform: translateX(-34px) } to { opacity: 1; transform: none } }
+.set-tab-in { animation: set-in .34s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes now-in { from { opacity: 0; transform: translateX(-38px) } to { opacity: 1; transform: none } }
 @keyframes peek-in { from { opacity: 0; transform: translateX(22px) scale(.8) } to { opacity: .8; transform: none } }
 .now-in { animation: now-in .55s cubic-bezier(.2,.8,.2,1) both; }

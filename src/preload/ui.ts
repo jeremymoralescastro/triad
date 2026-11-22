@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webFrame } from 'electron'
-import { CH, type Backend, type Command, type LoginStatus, type LyricsResult, type MainSettings, type PlayerState, type RpcMap, type StatsResult, type RpcMethod } from '@shared/types'
+import { CH, type Backend, type Command, type LoginStatus, type LyricsResult, type MainSettings, type PartyStatus, type PlayerState, type RpcMap, type StatsResult, type RpcMethod } from '@shared/types'
 
 /** what the UI has seen of every song (so a click can show the new song instantly) and the last "up next" list */
 interface TrackMeta { title: string; artist: string; thumbnail?: string; duration?: string }
@@ -50,6 +50,19 @@ const api = {
   getSettings: (): Promise<MainSettings> => ask<MainSettings>(CH.settingsGet),
   setSettings: (patch: Partial<MainSettings>): Promise<MainSettings> => ipcRenderer.invoke(CH.settingsSet, patch),
   clearHistory: (): Promise<void> => ipcRenderer.invoke(CH.clearHistory),
+  /** AI playlists: is a key stored (call with a string to store / '' to remove it) */
+  aiKey: (set?: string): Promise<boolean> => ipcRenderer.invoke(CH.aiKey, set === undefined ? {} : { set }),
+  aiStatus: (): Promise<{ provider: 'claude' | 'ollama' | 'none'; model?: string }> => ipcRenderer.invoke(CH.aiStatus),
+  partyHost: (): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyHost),
+  partyJoin: (code: string): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyJoin, code),
+  partyLeave: (): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyLeave),
+  partyStatus: (): Promise<PartyStatus> => ask<PartyStatus>(CH.partyGet),
+  onPartyStatus(cb: (s: PartyStatus) => void) {
+    const h = (_: unknown, s: PartyStatus) => cb(s)
+    ipcRenderer.on(CH.partyStatus, h)
+    return () => { ipcRenderer.off(CH.partyStatus, h) }
+  },
+  aiSuggest: (prompt: string, count: number): Promise<{ name: string; songs: { title: string; artist: string }[] }> => ipcRenderer.invoke(CH.aiSuggest, { prompt, count }),
   stats: (): Promise<StatsResult> => ipcRenderer.invoke(CH.stats),
   lyrics: (q: { title: string; artist: string; duration?: number }): Promise<LyricsResult | null> => ipcRenderer.invoke(CH.lyrics, q),
   openExternal: (url: string) => ipcRenderer.send(CH.openExternal, url),

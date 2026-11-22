@@ -7,7 +7,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "dist": "electron-vite build && electron-builder --win"
+    "dist": "electron-vite build && electron-builder --win",
+    "dist:mac": "electron-vite build && electron-builder --mac"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.1.0",
@@ -16,6 +17,7 @@
     "cross-fetch": "^4.0.0",
     "electron-updater": "^6.3.9",
     "lucide-react": "^0.460.0",
+    "mqtt": "^5.10.1",
     "node-html-parser": "^6.1.13",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

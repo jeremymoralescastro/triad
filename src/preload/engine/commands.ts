@@ -262,7 +262,11 @@ export async function runCommand(cmd: Command) {
       if (v && !seekMuted) v.volume = g          // fractional = smooth (during a seek it's applied by the fade-in)
       clearTimeout(syncTimer)
       syncTimer = setTimeout(() => {
-        webFrame.executeJavaScript(`document.querySelector('#movie_player')?.setVolume?.(${Math.round(g * 100)})`).catch(() => {})
+        // Never hand YouTube's own player a 0: it treats that as "mute" and STAYS muted when the slider comes back up.
+        // (True silence is already done above through the element's own volume.) Anything above 0 also un-mutes it.
+        if (g <= 0) return
+        const pct = Math.max(1, Math.round(g * 100))
+        webFrame.executeJavaScript(`(() => { const p = document.querySelector('#movie_player'); if (!p) return; if (p.isMuted?.()) p.unMute?.(); p.setVolume?.(${pct}) })()`).catch(() => {})
       }, 300)
       return
     }

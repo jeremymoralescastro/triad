@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowDown, ArrowUp, ChevronRight, Eye, EyeOff as HideIcon, Folder, Heart, Pencil, Plus, Trash2, Volume2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronRight, Eye, EyeOff as HideIcon, Folder, Heart, Pencil, Plus, Sparkles, Trash2, Volume2 } from 'lucide-react'
+import { smartSongs } from '@/lib/smartPlaylist'
 import { usePlayer } from '@/lib/store'
 import { useRpc } from '@/lib/useRpc'
 import { openTarget, type View } from '@/lib/view'
@@ -112,19 +113,87 @@ export function LibraryPanel({ view, go }: { view: View; go: (v: View) => void }
   const nameInput = useRef<HTMLInputElement>(null)
   useEffect(() => { if (naming) { const t = setTimeout(() => nameInput.current?.focus(), 220); return () => clearTimeout(t) } }, [naming])
 
+  /** put a just-made playlist into the list, mark it fresh and open it */
+  const finish = (r: { playlistId: string; title: string; count: number }, note: string) => {
+    const key = r.playlistId.startsWith('sc-') ? r.playlistId : 'VL' + r.playlistId   // same id the library list will use, so it's never listed twice
+    const item: Item = { kind: 'playlist', title: r.title, subtitle: `${r.count} songs`, browseId: key, playlistId: r.playlistId, owned: true }
+    setExtra((x) => [{ key, title: r.title, subtitle: `${r.count} songs · ${note}`, browseId: key, playlistId: r.playlistId, item }, ...x])   // show it right away
+    setFresh(key); setNaming(false); setName(''); refreshSoon()
+    go({ name: 'playlist', browseId: key, title: r.title, subtitle: `${r.count} songs · ${note}`, playlistId: r.playlistId })
+  }
+  const errText = (e: unknown) => String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']*':\s*/, '').replace(/^Error:\s*/, '')
+
   const create = async () => {
     const n = name.trim()
     if (!n || busy) return
     setBusy(true); setMsg(null)
     try {
       const r = await window.ytm.rpc('createPlaylist', { name: n })
-      const key = r.playlistId.startsWith('sc-') ? r.playlistId : 'VL' + r.playlistId   // same id the library list will use, so it's never listed twice
-      const item: Item = { kind: 'playlist', title: r.title, subtitle: `${r.count} songs`, browseId: key, playlistId: r.playlistId, owned: true }
-      setExtra((x) => [{ key, title: r.title, subtitle: `${r.count} songs · made with Triad`, browseId: key, playlistId: r.playlistId, item }, ...x])   // show it right away
-      setFresh(key); setNaming(false); setName(''); refreshSoon()
-      go({ name: 'playlist', browseId: key, title: r.title, subtitle: `${r.count} songs · made with Triad`, playlistId: r.playlistId })
-    } catch (e) { setMsg(String((e as Error).message ?? e).replace(/^Error:\s*/, '')) }
+      finish(r, 'made with Triad')
+    } catch (e) { setMsg(errText(e)) }
     finally { setBusy(false) }
+  }
+
+  /* ---- AI playlist: describe it, Claude picks the songs, we find each one and fill a real playlist ---- */
+  const [ai, setAi] = useState(false)
+  const [desc, setDesc] = useState('')
+  const [count, setCount] = useState(20)
+  const [progress, setProgress] = useState<string | null>(null)
+  const [provider, setProvider] = useState<{ provider: 'claude' | 'ollama' | 'none'; model?: string }>({ provider: 'none' })
+  useEffect(() => { if (naming && ai) window.ytm.aiStatus().then(setProvider).catch(() => {}) }, [naming, ai])
+
+  const findSong = async (s: { title: string; artist: string }): Promise<string | null> => {
+    const flat = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    try {
+      const shelves = await window.ytm.rpc('search', { query: `${s.title} ${s.artist}` })
+      const songs = shelves.flatMap((sh) => sh.items).filter((it) => it.kind === 'song' && it.videoId)
+      const first = flat(s.artist).split(' ')[0]
+      const hit = songs.find((it) => first && flat(`${it.subtitle} ${it.artist ?? ''}`).includes(first)) ?? songs[0]   // prefer the right artist
+      return hit?.videoId ?? null
+    } catch { return null }
+  }
+  const generate = async () => {
+    const d = desc.trim()
+    if (!d || busy) return
+    setBusy(true); setMsg(null)
+    let note: string | null = null, usedAi = false
+    try {
+      let ids: string[] = [], name = ''
+      if (provider.provider !== 'none') {
+        try {
+          setProgress(provider.provider === 'ollama' ? 'Asking your local AI… (the first time can take a minute)' : 'Thinking up songs…')
+          const plan = await window.ytm.aiSuggest(d, count)
+          const results: (string | null)[] = new Array(plan.songs.length).fill(null)
+          let next = 0, done = 0
+          const worker = async () => {
+            for (;;) {
+              const i = next++
+              if (i >= plan.songs.length) return
+              results[i] = await findSong(plan.songs[i])
+              setProgress(`Finding songs… ${++done}/${plan.songs.length}`)
+            }
+          }
+          await Promise.all([worker(), worker(), worker(), worker()])
+          ids = [...new Set(results.filter((x): x is string => !!x))]
+          name = plan.name; usedAi = ids.length > 0
+        } catch (e) { note = errText(e) }
+      }
+      if (!ids.length) {                                  // no AI set up, or it failed: build it from searches instead
+        setProgress('Searching…')
+        const r = await smartSongs(d, count)
+        ids = r.ids; name = r.name
+        if (provider.provider !== 'none' && note) note = `The AI didn’t work (${note}), so Triad used smart search instead.`
+        else note = null
+      }
+      if (!ids.length) throw new Error('Couldn’t find songs for that. Try describing it differently.')
+      setProgress('Creating the playlist…')
+      const r = await window.ytm.rpc('createPlaylist', { name: name || d.slice(0, 50) })
+      await window.ytm.rpc('addToPlaylist', { playlistId: r.playlistId, videoId: ids[0], videoIds: ids })
+      finish({ ...r, count: ids.length }, usedAi ? 'made by AI' : 'made with Triad')
+      setDesc('')
+      if (note) setMsg(note)
+    } catch (e) { setMsg(errText(e)) }
+    finally { setBusy(false); setProgress(null) }
   }
 
   /* ---- right-click menu: rename / delete / move ---- */
@@ -226,18 +295,45 @@ export function LibraryPanel({ view, go }: { view: View; go: (v: View) => void }
       <div className={`grid shrink-0 transition-[grid-template-rows,opacity] duration-300 ease-out ${naming ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
         aria-hidden={!naming}>
         <div className="overflow-hidden">
-          <form className="px-4 pb-3 pt-1" onSubmit={(e) => { e.preventDefault(); create() }}>
-            <input ref={nameInput} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} disabled={busy} tabIndex={naming ? 0 : -1}
-              placeholder="Name it, e.g. “late night drive”"
-              className="h-10 w-full rounded-full bg-hover px-4 text-[14px] outline-none placeholder:text-mute focus:ring-2 focus:ring-accent" />
-            <div className="mt-2 flex items-center gap-2">
-              <button type="submit" disabled={!name.trim() || busy} tabIndex={naming ? 0 : -1}
-                className="h-8 rounded-full blue-glass px-4 text-[13px] font-semibold transition-opacity disabled:opacity-40">
-                {busy ? 'Creating…' : 'Create'}
-              </button>
-              <button type="button" tabIndex={naming ? 0 : -1} onClick={() => setNaming(false)} className="text-[13px] text-mute hover:text-white">Cancel</button>
+          <form className="px-4 pb-3 pt-1" onSubmit={(e) => { e.preventDefault(); ai ? generate() : create() }}>
+            <div className="mb-2 flex gap-1 rounded-full bg-white/[.06] p-1 text-[12px] font-medium" role="tablist">
+              <button type="button" role="tab" aria-selected={!ai} tabIndex={naming ? 0 : -1} disabled={busy} onClick={() => { setAi(false); setMsg(null) }}
+                className={`h-7 flex-1 rounded-full transition-colors ${!ai ? 'bg-white/15 text-white' : 'text-white/55 hover:text-white'}`}>Name it</button>
+              <button type="button" role="tab" aria-selected={ai} tabIndex={naming ? 0 : -1} disabled={busy} onClick={() => { setAi(true); setMsg(null) }}
+                className={`flex h-7 flex-1 items-center justify-center gap-1 rounded-full transition-colors ${ai ? 'bg-white/15 text-white' : 'text-white/55 hover:text-white'}`}><Sparkles size={12} />Describe it</button>
             </div>
-            <p className="mt-2 text-[12px] leading-snug text-mute">Starts empty — add songs from the suggestions on its page.</p>
+            {!ai ? (<>
+              <input ref={nameInput} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} disabled={busy} tabIndex={naming ? 0 : -1}
+                placeholder="Name it, e.g. “late night drive”"
+                className="h-10 w-full rounded-full bg-hover px-4 text-[14px] outline-none placeholder:text-mute focus:ring-2 focus:ring-accent" />
+              <div className="mt-2 flex items-center gap-2">
+                <button type="submit" disabled={!name.trim() || busy} tabIndex={naming ? 0 : -1}
+                  className="h-8 rounded-full blue-glass px-4 text-[13px] font-semibold transition-opacity disabled:opacity-40">
+                  {busy ? 'Creating…' : 'Create'}
+                </button>
+                <button type="button" tabIndex={naming ? 0 : -1} onClick={() => setNaming(false)} className="text-[13px] text-mute hover:text-white">Cancel</button>
+              </div>
+              <p className="mt-2 text-[12px] leading-snug text-mute">Starts empty — add songs from the suggestions on its page.</p>
+            </>) : (<>
+              <textarea value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={300} rows={3} disabled={busy} tabIndex={naming ? 0 : -1}
+                placeholder="Describe it, e.g. “moody late-night drive, synthwave and 80s-style pop”"
+                className="w-full resize-none rounded-[20px] bg-hover px-4 py-3 text-[14px] leading-snug outline-none placeholder:text-mute focus:ring-2 focus:ring-accent" />
+              <div className="mt-2 flex items-center gap-2">
+                <button type="submit" disabled={!desc.trim() || busy} tabIndex={naming ? 0 : -1}
+                  className="h-8 rounded-full blue-glass px-4 text-[13px] font-semibold transition-opacity disabled:opacity-40">
+                  {busy ? 'Working…' : 'Generate'}
+                </button>
+                <select value={count} onChange={(e) => setCount(+e.target.value)} disabled={busy} tabIndex={naming ? 0 : -1} aria-label="Number of songs"
+                  className="h-8 rounded-full bg-white/10 px-2 text-[13px] outline-none">
+                  {[10, 20, 30, 50].map((n) => <option key={n} value={n} className="bg-[#1b1b1f]">{n} songs</option>)}
+                </select>
+                <button type="button" tabIndex={naming ? 0 : -1} onClick={() => setNaming(false)} className="text-[13px] text-mute hover:text-white">Cancel</button>
+              </div>
+              {progress && <p className="mt-2 text-[12px] leading-snug text-white/70">{progress}</p>}
+              {!progress && <p className="mt-2 text-[12px] leading-snug text-mute">
+                {provider.provider === 'claude' ? 'Using your Anthropic key. ' : provider.provider === 'ollama' ? `Using your local AI (${provider.model}). ` : 'No AI set up, so Triad builds it from searches (Settings → AI playlists to add one). '}
+                Makes a real playlist on {backend === 'sc' ? 'SoundCloud' : 'YouTube Music'}.</p>}
+            </>)}
             {msg && <p className="mt-1 text-[12px] leading-snug text-[#e69a9a]">{msg}</p>}
           </form>
         </div>

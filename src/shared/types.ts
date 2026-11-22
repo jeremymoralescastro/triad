@@ -77,6 +77,16 @@ export type Command =
   | { type: 'speed'; value: number }
   | { type: 'fx'; reverb: number; flanger: number }
 
+/** Listening party: one person hosts, others join with a room code and follow along */
+export interface PartyStatus {
+  role: 'none' | 'host' | 'guest'
+  connected: boolean
+  code?: string                 // 12 letters/digits (host: share it; guest: the one you joined)
+  listeners?: number            // host: how many are listening right now
+  hostTrack?: string            // guest: what the host is playing
+  note?: string                 // e.g. the host is on the other service
+}
+
 export interface RpcMap {
   search: { args: { query: string }; result: Shelf[] }
   home: { args: undefined; result: Shelf[] }
@@ -91,7 +101,7 @@ export interface RpcMap {
   suggest: { args: { query: string }; result: string[] }
   removeFromPlaylist: { args: { playlistId: string; videoId: string; setVideoId?: string }; result: { ok: true } }
   moveInPlaylist: { args: { playlistId: string; setVideoId: string; beforeSetVideoId: string }; result: { ok: true } }
-  addToPlaylist: { args: { playlistId: string; videoId: string }; result: { ok: true } }
+  addToPlaylist: { args: { playlistId: string; videoId: string; videoIds?: string[] }; result: { ok: true } }
   renamePlaylist: { args: { playlistId: string; name: string }; result: { ok: true } }
   deletePlaylist: { args: { playlistId: string }; result: { ok: true } }
 }
@@ -162,6 +172,14 @@ export const CH = {
   openExternal: 'ytm:open-external',
   titleBar: 'ytm:title-bar',
   setBackend: 'ytm:set-backend',
+  aiKey: 'ytm:ai-key',
+  aiSuggest: 'ytm:ai-suggest',
+  aiStatus: 'ytm:ai-status',
+  partyHost: 'ytm:party-host',
+  partyJoin: 'ytm:party-join',
+  partyLeave: 'ytm:party-leave',
+  partyGet: 'ytm:party-get',
+  partyStatus: 'ytm:party-status',
   videoFrame: 'ytm:video-frame',
   videoOpen: 'ytm:video-open',
   videoClose: 'ytm:video-close',

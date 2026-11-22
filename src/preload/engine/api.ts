@@ -240,13 +240,14 @@ const handlers: { [K in RpcMethod]: (a: RpcMap[K]['args']) => Promise<RpcMap[K][
     return { playlistId, title, count: 0 }
   },
   // Liked Music is a "like"; any other playlist gets the track appended (duplicates are skipped)
-  addToPlaylist: async ({ playlistId, videoId }) => {
+  addToPlaylist: async ({ playlistId, videoId, videoIds }) => {
     const id = playlistId.replace(/^VL/, '')
-    const res = id === 'LM'
-      ? await innertube('like/like', { target: { videoId } })
-      : await innertube('browse/edit_playlist', { playlistId: id, actions: [{ action: 'ACTION_ADD_VIDEO', addedVideoId: videoId, dedupeOption: 'DEDUPE_OPTION_SKIP' }] })
+    const ids = (videoIds?.length ? videoIds : [videoId]).filter(Boolean)
+    let res: any
+    if (id === 'LM') for (const v of ids) res = await innertube('like/like', { target: { videoId: v } })
+    else res = await innertube('browse/edit_playlist', { playlistId: id, actions: ids.map((v) => ({ action: 'ACTION_ADD_VIDEO', addedVideoId: v, dedupeOption: 'DEDUPE_OPTION_SKIP' })) })
     if (res?.status && res.status !== 'STATUS_SUCCEEDED') throw new Error(`YouTube Music said ${res.status}`)
-    log(`added ${videoId} to ${id}`)
+    log(`added ${ids.length} song(s) to ${id}`)
     return { ok: true as const }
   },
   // What's coming up after the current song (YouTube's own order for the playlist / radio it's playing from)

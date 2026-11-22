@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, RotateCcw, X } from 'lucide-react'
 import type { MainSettings } from '@shared/types'
@@ -57,22 +57,52 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [clientId, setClientId] = useState('')
   useEffect(() => { if (main) setClientId((c) => c || main.discordClientId) }, [main])
   const idOk = /^\d{15,25}$/.test(clientId.trim())
+  const [aiSet, setAiSet] = useState(false)
+  const [aiKey, setAiKey] = useState('')
+  const [aiMsg, setAiMsg] = useState<string | null>(null)
+  const [aiProv, setAiProv] = useState<{ provider: 'claude' | 'ollama' | 'none'; model?: string } | null>(null)
+  const refreshAi = () => window.ytm.aiStatus().then(setAiProv).catch(() => {})
+  useEffect(() => { window.ytm.aiKey().then(setAiSet).catch(() => {}); refreshAi() }, [])
+  const saveKey = async (v: string) => {
+    try { setAiSet(await window.ytm.aiKey(v)); setAiKey(''); setAiMsg(v ? 'Saved.' : 'Removed.'); refreshAi() }
+    catch (e) { setAiMsg(String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']*':\s*(Error:\s*)?/, '')) }
+  }
 
   const setMainValue = (patch: Partial<MainSettings>) => {
     setMain((m) => (m ? { ...m, ...patch } : m))                 // instant, then confirmed by the main process
     window.ytm.setSettings(patch).then(setMain).catch(() => {})
   }
 
+  const TABS = [['appearance', 'Appearance'], ['equalizer', 'Equalizer'], ['playback', 'Playback'], ['discord', 'Discord'], ['ai', 'AI'], ['system', 'System']] as const
+  const [tab, setTab] = useState<(typeof TABS)[number][0]>('appearance')
+  const tabEls = useRef<Record<string, HTMLButtonElement | null>>({})
+  const [pill, setPill] = useState<{ left: number; width: number } | null>(null)
+  useLayoutEffect(() => {
+    const place = () => { const el = tabEls.current[tab]; if (el) setPill({ left: el.offsetLeft, width: el.offsetWidth }) }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [tab])
+
   return createPortal(
     <div className="fixed inset-0 z-[200] grid place-items-center bg-black/50 p-6 backdrop-blur-sm" onMouseDown={onClose}>
       <div role="dialog" aria-modal="true" aria-label="Settings" onMouseDown={(e) => e.stopPropagation()}
-        className="menu-pop max-h-[85vh] w-full max-w-[520px] overflow-y-auto rounded-[28px] p-6">
+        className="menu-pop flex h-[min(680px,86vh)] w-full max-w-[520px] flex-col overflow-hidden rounded-[28px] px-6 pt-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[22px] font-bold tracking-tight">Settings</h2>
           <button onClick={onClose} aria-label="Close settings" className="grid size-8 place-items-center rounded-full text-mute hover:bg-white/10 hover:text-white"><X size={18} /></button>
         </div>
+        <div role="tablist" aria-label="Settings sections" className="relative mb-3 flex shrink-0 gap-0.5 overflow-x-auto rounded-full bg-white/[.06] p-1 [scrollbar-width:none]">
+          {pill && <span aria-hidden className="absolute bottom-1 top-1 rounded-full bg-white/15 transition-[left,width] duration-300 ease-out" style={{ left: pill.left, width: pill.width }} />}
+          {TABS.map(([k, label]) => (
+            <button key={k} ref={(el) => { tabEls.current[k] = el }} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+              className={`relative h-8 flex-auto shrink-0 whitespace-nowrap rounded-full px-2.5 text-[12.5px] font-medium transition-colors ${tab === k ? 'text-white' : 'text-white/55 hover:text-white'}`}>{label}</button>
+          ))}
+        </div>
 
-        <Section title="Appearance">
+        <div key={tab} className="set-tab-in min-h-0 flex-1 overflow-y-auto pb-6 pr-1">
+
+        {tab === 'appearance' && (<Section title="Appearance">
           <Row title="Theme" hint="Triad is the default. Vista is a glossy Windows Aero look. OLED is pure black, flat and light. Retro is an old NES / Famicom style in beige, charcoal and maroon.">
             <div className="flex rounded-full bg-white/10 p-0.5" role="radiogroup" aria-label="Theme">
               {THEMES.map((t) => (
@@ -107,9 +137,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           <Row title="Synced lyrics" hint="Highlight and scroll to the line being sung.">
             <Switch label="Synced lyrics" on={ui.lyricsSync} onChange={(v) => ui.set({ lyricsSync: v })} />
           </Row>
-        </Section>
+        </Section>)}
 
-        <Section title="Equalizer">
+        {tab === 'equalizer' && (<Section title="Equalizer">
           <div className="py-3">
             <div className="mb-3 flex items-center justify-end gap-2">
               <button onClick={() => setEq([0, 0, 0, 0, 0, 0, 0, 0], true)} disabled={eqFlat}
@@ -127,9 +157,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <Equalizer gains={main?.eq ?? [0, 0, 0, 0, 0, 0, 0, 0]} onChange={setEq} disabled={!eqOn} />
             <p className="mt-2.5 text-[12.5px] leading-snug text-mute">Drag the surface to shape the sound. Applies to everything Triad plays. Turn it off to hear the original sound; your curve is kept.</p>
           </div>
-        </Section>
+        </Section>)}
 
-        <Section title="Playback & privacy">
+        {tab === 'playback' && (<Section title="Playback & privacy">
           <Row title="Track listening history" hint="Powers “Your most played” on the home screen. Stays on this computer.">
             <Switch label="Track listening history" on={main?.trackHistory ?? true} onChange={(v) => setMainValue({ trackHistory: v })} />
           </Row>
@@ -145,12 +175,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 className="h-8 rounded-full bg-white/10 px-3.5 text-[13px] font-medium hover:bg-white/15">{cleared ? 'Cleared ✓' : 'Clear…'}</button>
             )}
           </Row>
-          <Row title="Global shortcuts" hint="Ctrl+Alt+Space play/pause · Ctrl+Alt+←/→ previous/next · Ctrl+Alt+↑/↓ volume. Works while Triad is in the background.">
+          <Row title="Global shortcuts" hint={(/Mac/i.test(navigator.userAgent) ? '⌘⌥' : 'Ctrl+Alt+') + 'Space play/pause · ' + (/Mac/i.test(navigator.userAgent) ? '⌘⌥' : 'Ctrl+Alt+') + '←/→ previous/next · ' + (/Mac/i.test(navigator.userAgent) ? '⌘⌥' : 'Ctrl+Alt+') + '↑/↓ volume. Works while Triad is in the background.'}>
             <Switch label="Global shortcuts" on={main?.hotkeys ?? true} onChange={(v) => setMainValue({ hotkeys: v })} />
           </Row>
-        </Section>
+        </Section>)}
 
-        <Section title="Discord">
+        {tab === 'discord' && (<Section title="Discord">
           <Row title="Show what I'm listening to" hint="Displays “Listening to …” on your Discord profile while music plays. Only while Discord is open.">
             <Switch label="Discord listening status" on={main?.discord ?? false} onChange={(v) => setMainValue({ discord: v })} />
           </Row>
@@ -163,15 +193,42 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               {clientId && !idOk ? 'That doesn’t look like an application ID (it’s 17–20 digits).' : <>Create a free app at <button onClick={() => window.ytm.openExternal('https://discord.com/developers/applications')} className="underline hover:text-white">discord.com/developers</button>, name it “Triad” (that name is what friends see), and paste its Application ID here.</>}
             </p>
           </div>}
-        </Section>
+        </Section>)}
 
-        <Section title="System">
+        {tab === 'ai' && (<Section title="AI playlists">
+          <div className="py-3">
+            <div className="text-[14.5px] font-medium text-white/90">Make playlists from a description</div>
+            <p className="mt-1 text-[12.5px] leading-snug text-white/75">
+              {aiProv == null ? 'Checking…' : aiProv.provider === 'claude' ? 'Using: your Anthropic key.' : aiProv.provider === 'ollama' ? `Using: local AI (${aiProv.model}), free and private.` : 'Using: smart search (works with no AI installed, but it doesn’t really understand the description).'}
+              {' '}<button onClick={refreshAi} className="underline hover:text-white">Check again</button>
+            </p>
+            <p className="mt-2 text-[12.5px] leading-snug text-mute">
+              Where: Your Library → New playlist → Describe it. For free local AI, install <button onClick={() => window.ytm.openExternal('https://ollama.com/download')} className="underline hover:text-white">Ollama</button>, then run <code className="rounded bg-white/10 px-1">ollama pull llama3.2</code> once in a terminal. Triad finds it by itself.
+            </p>
+          </div>
+          <div className="py-3">
+            <label htmlFor="aik" className="text-[14.5px] font-medium text-white/90">Optional: Anthropic API key {aiSet && <span className="ml-1 text-[12.5px] font-normal text-accent">· saved</span>}</label>
+            <div className="mt-2 flex gap-2">
+              <input id="aik" type="password" value={aiKey} onChange={(e) => { setAiKey(e.target.value); setAiMsg(null) }} placeholder={aiSet ? '••••••••••••  (saved, paste a new one to replace)' : 'sk-ant-…'} spellCheck={false} autoComplete="off"
+                onKeyDown={(e) => e.key === 'Enter' && aiKey.trim() && saveKey(aiKey)}
+                className="h-10 min-w-0 flex-1 rounded-full bg-white/10 px-4 text-[14px] outline-none placeholder:text-mute focus:ring-2 focus:ring-accent" />
+              <button onClick={() => saveKey(aiKey)} disabled={!aiKey.trim()} className="h-10 rounded-full bg-white/10 px-4 text-[13px] font-medium hover:bg-white/15 disabled:opacity-40">Save</button>
+              {aiSet && <button onClick={() => saveKey('')} className="h-10 rounded-full bg-white/10 px-3 text-[13px] hover:bg-white/15">Remove</button>}
+            </div>
+            <p className={`mt-2 text-[12.5px] leading-snug ${aiMsg && !/^(Saved|Removed)/.test(aiMsg) ? 'text-[#e69a9a]' : 'text-mute'}`}>
+              {aiMsg ?? <>Better song picks than a small local AI. Uses your own key from <button onClick={() => window.ytm.openExternal('https://console.anthropic.com/settings/keys')} className="underline hover:text-white">console.anthropic.com</button> (a few cents per playlist at most); only your description is sent to Anthropic. The key is stored encrypted on this computer, and while one is saved it is used instead of the local AI.</>}
+            </p>
+          </div>
+        </Section>)}
+
+        {tab === 'system' && (<Section title="System">
           <Row title="Launch at login" hint="Start Triad when you sign in to Windows (installed app only).">
             <Switch label="Launch at login" on={main?.launchAtLogin ?? false} onChange={(v) => setMainValue({ launchAtLogin: v })} />
           </Row>
-        </Section>
+        </Section>)}
 
         <p className="mt-5 text-[12px] text-white/40">Triad · music from YouTube Music, lyrics from Genius &amp; LRCLIB</p>
+        </div>
       </div>
     </div>,
     document.body

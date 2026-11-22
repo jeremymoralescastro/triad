@@ -554,9 +554,11 @@ if (/(^|\.)soundcloud\.com$/.test(location.hostname) && window.top === window) {
       }
       case 'addToPlaylist': {
         if (!isLocal(a.playlistId)) await needLogin()
-        if (norm(a.playlistId) === 'LM') { await runLike(a.videoId, true); return { ok: true } }
-        const ids = await playlistIds(a.playlistId); const t = Number(a.videoId)
-        if (!ids.includes(t)) await putTracks(a.playlistId, [...ids, t])
+        const add = (a.videoIds?.length ? a.videoIds : [a.videoId]).map(Number).filter((n: number) => Number.isFinite(n))
+        if (norm(a.playlistId) === 'LM') { for (const t of add) await runLike(String(t), true); return { ok: true } }
+        const ids = await playlistIds(a.playlistId)
+        const merged = [...ids, ...add.filter((t: number, i: number) => !ids.includes(t) && add.indexOf(t) === i)]
+        if (merged.length !== ids.length) await putTracks(a.playlistId, merged)      // one write for the whole batch
         return { ok: true }
       }
       case 'removeFromPlaylist': {

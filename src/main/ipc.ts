@@ -1,5 +1,7 @@
 import { BrowserWindow, dialog, globalShortcut, ipcMain, session, shell } from 'electron'
 import { getLyrics } from './lyrics'
+import { aiStatus, hasAiKey, setAiKey, suggestPlaylist } from './ai'
+import { party } from './party'
 import { clearStats, getStats, trackListening } from './stats'
 import { getSettings, setSettings } from './settings'
 import { holdSessionSaves, loadSession, saveSession } from './session'
@@ -25,6 +27,7 @@ export function wireIpc(first: BrowserWindow, firstBackend: Backend, makeEngine:
     trackListening(state)
     saveSession(state)
     discord.update(state)
+    party.onLocalState(state)
     syncVideo(state)
     if (!ui.isDestroyed()) ui.webContents.send(CH.state, state)
   })
@@ -230,6 +233,25 @@ export function wireIpc(first: BrowserWindow, firstBackend: Backend, makeEngine:
     return next
   })
   ipcMain.handle(CH.clearHistory, () => { clearStats() })
+  ipcMain.handle(CH.aiStatus, () => aiStatus())
+  party.configure({
+    send, backend: () => backend,
+    emit: (s) => {
+      if (!ui.isDestroyed()) ui.webContents.send(CH.partyStatus, s)
+      discord.setParty(s.role === 'host' ? s.code ?? null : null, (s.listeners ?? 0) + 1)       // hosting = a Join button on your Discord profile
+    }
+  })
+  discord.onJoin = (code) => {                                  // a friend pressed Join on Discord
+    if (!ui.isDestroyed()) { if (ui.isMinimized()) ui.restore(); ui.show(); ui.focus() }
+    party.join(code).catch((e) => console.log('[party] join from Discord failed:', String(e?.message ?? e)))
+  }
+  ipcMain.handle(CH.partyHost, () => party.host())
+  ipcMain.handle(CH.partyJoin, (_e, code: string) => party.join(String(code ?? '')))
+  ipcMain.handle(CH.partyLeave, () => party.leave())
+  ipcMain.handle(CH.partyGet, () => party.status())
+  ipcMain.handle(CH.aiKey, (_e, op?: { set?: string }) => { if (op && typeof op.set === 'string') setAiKey(op.set); return hasAiKey() })
+  ipcMain.handle(CH.aiSuggest, (_e, a: { prompt: string; count: number }) =>
+    suggestPlaylist(String(a?.prompt ?? '').slice(0, 500), Number(a?.count), backend === 'sc' ? 'SoundCloud' : 'YouTube Music'))
 
   // ---- startup: restore the equalizer, Discord, and reopen the last song (paused, at the same spot) ----
   send({ type: 'eq', gains: eqGains() })

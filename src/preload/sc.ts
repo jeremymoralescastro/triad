@@ -217,12 +217,13 @@ if (/(^|\.)soundcloud\.com$/.test(location.hostname) && window.top === window) {
   let baseLen = 0                  // how many entries of ctx are the playlist itself (the rest is radio)
   let played = new Set<number>()   // shuffle: what's been heard this round
   const liked = new Set<number>()
-  let likesLoaded = false
+  let likesP: Promise<void> | null = null
 
-  async function loadLikes() {
-    if (likesLoaded || !me) return
-    likesLoaded = true
-    try { const r = await api('/me/track_likes/ids', { params: { limit: 5000 } }); for (const x of (Array.isArray(r) ? r : r?.collection ?? [])) liked.add(Number(x?.id ?? x)) } catch (e) { log('likes: ' + e) }
+  function loadLikes(): Promise<void> {
+    if (!me) return Promise.resolve()
+    return likesP ??= (async () => {
+      try { const r = await api('/me/track_likes/ids', { params: { limit: 5000 } }); for (const x of (Array.isArray(r) ? r : r?.collection ?? [])) liked.add(Number(x?.id ?? x)) } catch (e) { log('likes: ' + e); likesP = null }
+    })()
   }
 
   /**
@@ -420,9 +421,16 @@ if (/(^|\.)soundcloud\.com$/.test(location.hostname) && window.top === window) {
       case 'like': {
         if (!cur || !me) return
         const id = cur.id
+        await loadLikes()                                          // know what's already liked before flipping it
         listCache.delete('LM')
-        if (liked.has(id)) { liked.delete(id); await api(`/users/${me.id}/track_likes/${id}`, { method: 'DELETE' }).catch(() => liked.add(id)) }
-        else { liked.add(id); await api(`/users/${me.id}/track_likes/${id}`, { method: 'PUT' }).catch(() => liked.delete(id)) }
+        const was = liked.has(id)
+        was ? liked.delete(id) : liked.add(id)                     // shows immediately
+        try { await api(`/users/${me.id}/track_likes/${id}`, { method: was ? 'DELETE' : 'PUT' }) }
+        catch (e) {
+          was ? liked.add(id) : liked.delete(id)
+          log(`${was ? 'unlike' : 'like'} failed: ${e}`)
+          notice = `${Date.now()}|Couldn’t ${was ? 'unlike' : 'like'} that: ${String((e as Error)?.message ?? e).slice(0, 140)}`
+        }
         return
       }
       case 'dislike': return

@@ -30,6 +30,8 @@ class Party {
   private latest: PlayerState | null = null
   private pub = { key: '', pos: 0, at: 0 }
   private listeners = new Map<string, number>()
+  private names = new Map<string, string>()      // listener id -> display name
+  private myName = ''                              // remembered so a Join from Discord still carries your name
   // guest
   private remote: Remote | null = null
   private last: PlayerState | null = null
@@ -40,9 +42,11 @@ class Party {
 
   status(): PartyStatus {
     const now = Date.now()
-    const listeners = this.role === 'host' ? [...this.listeners.values()].filter((t) => now - t < 25_000).length : undefined
+    const live = this.role === 'host' ? [...this.listeners].filter(([, t]) => now - t < 25_000).map(([id]) => id) : []
+    const listeners = this.role === 'host' ? live.length : undefined
     return {
       role: this.role, connected: this.connected, code: this.code || undefined, listeners, note: this.note || undefined,
+      names: this.role === 'host' ? live.map((id) => this.names.get(id) || 'A friend') : undefined,
       hostName: this.role === 'guest' && this.remote && !this.remote.end ? this.remote.name || undefined : undefined,
       hostTrack: this.role === 'guest' && this.remote && !this.remote.end ? `${this.remote.title}${this.remote.artist ? ' — ' + this.remote.artist : ''}` : undefined
     }
@@ -67,13 +71,13 @@ class Party {
 
   async host(name = ''): Promise<PartyStatus> {
     await this.leave()
-    this.name = name
+    this.name = name; if (name) this.myName = name
     let c: MqttClient | null = null, idx = -1
     for (let i = 0; i < BROKERS.length && !c; i++) { try { c = await this.open(BROKERS[i]); idx = i } catch { /* try the next relay */ } }
     if (!c) throw new Error('Couldn’t reach a relay server. Check your internet connection and try again.')
     this.code = ALPHA[idx] + Array.from(randomBytes(11), (b) => ALPHA[b % ALPHA.length]).join('')
     this.base = `triad-party/v1/${this.code}`
-    this.role = 'host'; this.note = ''; this.listeners.clear(); this.pub = { key: '', pos: 0, at: 0 }
+    this.role = 'host'; this.note = ''; this.listeners.clear(); this.names.clear(); this.pub = { key: '', pos: 0, at: 0 }
     this.attach(c)
     c.subscribe(`${this.base}/g`)
     this.timers.push(setInterval(() => this.publish(true), 4000), setInterval(() => this.emit(), 5000))
@@ -81,7 +85,8 @@ class Party {
     return this.status()
   }
 
-  async join(raw: string): Promise<PartyStatus> {
+  async join(raw: string, name = ''): Promise<PartyStatus> {
+    if (name) this.myName = name
     const code = raw.toUpperCase().replace(/[^A-Z0-9]/g, '')
     const idx = ALPHA.indexOf(code[0] ?? '')
     if (code.length !== 12 || idx < 0 || idx >= BROKERS.length || [...code].some((ch) => !ALPHA.includes(ch))) throw new Error('That room code doesn’t look right. It has 12 letters and numbers.')
@@ -91,7 +96,7 @@ class Party {
     this.code = code; this.base = `triad-party/v1/${code}`; this.role = 'guest'; this.remote = null; this.note = 'Waiting for the host…'
     this.attach(c)
     c.subscribe(`${this.base}/s`)           // the host's latest state is retained, so it arrives right away
-    const hi = () => { try { c.publish(`${this.base}/g`, JSON.stringify({ id: this.myId })) } catch { /* ignore */ } }
+    const hi = () => { try { c.publish(`${this.base}/g`, JSON.stringify({ id: this.myId, name: this.myName })) } catch { /* ignore */ } }
     hi(); this.timers.push(setInterval(hi, 8000))
     this.emit()
     return this.status()
@@ -107,7 +112,7 @@ class Party {
       await new Promise((r) => setTimeout(r, this.role === 'host' ? 300 : 0))      // let the goodbye go out
       try { c.end(true) } catch { /* ignore */ }
     }
-    this.role = 'none'; this.code = ''; this.base = ''; this.connected = false; this.note = ''; this.remote = null; this.listeners.clear()
+    this.role = 'none'; this.code = ''; this.base = ''; this.connected = false; this.note = ''; this.remote = null; this.listeners.clear(); this.names.clear()
     this.emit()
     return this.status()
   }
@@ -134,7 +139,7 @@ class Party {
 
   private onMessage(topic: string, text: string) {
     if (this.role === 'host' && topic.endsWith('/g')) {
-      try { const m = JSON.parse(text); if (typeof m?.id === 'string' && m.id !== this.myId) { const had = this.listeners.size; this.listeners.set(m.id.slice(0, 20), Date.now()); if (this.listeners.size !== had) this.emit() } } catch { /* ignore */ }
+      try { const m = JSON.parse(text); if (typeof m?.id === 'string' && m.id !== this.myId) { const had = this.listeners.size; const id = m.id.slice(0, 20), nm = typeof m.name === 'string' ? m.name.replace(/[\u0000-\u001f]/g, '').slice(0, 40) : ''; this.listeners.set(id, Date.now()); const oldName = this.names.get(id); if (nm) this.names.set(id, nm); if (this.listeners.size !== had || (nm && nm !== oldName)) this.emit() } } catch { /* ignore */ }
       return
     }
     if (this.role !== 'guest' || !topic.endsWith('/s')) return

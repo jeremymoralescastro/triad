@@ -2,7 +2,7 @@ import { ipcRenderer, webFrame } from 'electron'
 import { CH, type LikeStatus, type PlayerState } from '@shared/types'
 import { skipAdIfShowing } from './ads'
 import { eqKeepAlive, getFx, restoreEq } from './eq'
-import { applyResume, checkPending, clearAutoplay, getUserQueue, getDesiredVolume, getRepeat, getShuffle, getShownVolume, enforceSpeed, enforceVolume, getSpeed, isSeekMuted, log, modeTick, wantsAutoplay } from './commands'
+import { knownLike, applyResume, checkPending, clearAutoplay, getUserQueue, getDesiredVolume, getRepeat, getShuffle, getShownVolume, enforceSpeed, enforceVolume, getSpeed, isSeekMuted, log, modeTick, wantsAutoplay } from './commands'
 
 const video = () => document.querySelector<HTMLVideoElement>('video')
 const txt = (sel: string) => document.querySelector(sel)?.textContent?.trim() ?? ''
@@ -60,7 +60,7 @@ function snapshot(): Partial<PlayerState> {
     currentTime: v?.currentTime ?? 0,
     duration: v && isFinite(v.duration) ? v.duration : 0,
     volume: v ? Math.round(getShownVolume(v) * 1000) / 10 : 100,   // the real volume, never the brief silence of a skip
-    likeStatus: (document.querySelector('ytmusic-like-button-renderer')?.getAttribute('like-status') as LikeStatus) || 'INDIFFERENT',
+    likeStatus: knownLike(new URL(location.href).searchParams.get('v') ?? '') ?? 'INDIFFERENT',
     repeat: getRepeat(),
     shuffle: getShuffle(),
     speed: getSpeed(),

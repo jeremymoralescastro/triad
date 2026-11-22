@@ -62,7 +62,7 @@ const api = {
     ipcRenderer.on(CH.updateStatus, h)
     return () => { ipcRenderer.off(CH.updateStatus, h) }
   },
-  partyJoin: (code: string): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyJoin, code),
+  partyJoin: (code: string, name?: string): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyJoin, code, name ?? ''),
   partyLeave: (): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyLeave),
   partyStatus: (): Promise<PartyStatus> => ask<PartyStatus>(CH.partyGet),
   onPartyStatus(cb: (s: PartyStatus) => void) {

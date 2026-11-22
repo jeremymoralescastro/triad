@@ -1,9 +1,27 @@
 import { ipcRenderer, webFrame } from 'electron'
-import { CH, type Command, type QueueItem } from '@shared/types'
+import { CH, type Command, type LikeStatus, type QueueItem } from '@shared/types'
 import { applyEq, applyFx } from './eq'
 
 const video = () => document.querySelector<HTMLVideoElement>('video')
 const click = (sel: string) => document.querySelector<HTMLElement>(sel)?.click()
+
+/** like/unlike goes through YouTube Music's own API (api.ts fills this in) instead of poking at the page's heart button, which is easy for the site to change */
+export const hooks: { like?: (videoId: string, on: boolean) => Promise<void>; likeStatusOf?: (videoId: string) => Promise<LikeStatus> } = {}
+/** what we know about a song's like status after the user changed it (the hidden page itself doesn't redraw its heart) */
+export const likeOverride = new Map<string, LikeStatus>()
+/** the real like status per song, asked from YouTube Music (the page's own heart is unreliable: it can show the previous song's state or a playlist row's) */
+const likeCache = new Map<string, LikeStatus>()
+const likeAsking = new Map<string, number>()
+export function knownLike(id: string): LikeStatus | undefined {
+  const known = likeOverride.get(id) ?? likeCache.get(id)
+  if (known || !id || !hooks.likeStatusOf) return known
+  if (Date.now() - (likeAsking.get(id) ?? 0) > 6000) {
+    likeAsking.set(id, Date.now())
+    hooks.likeStatusOf(id).then((st) => { if (!likeOverride.has(id)) likeCache.set(id, st) }).catch(() => { /* asked again in a few seconds */ })
+  }
+  return undefined
+}
+const currentVideoId = () => new URL(location.href).searchParams.get('v')
 
 /* ---- autoplay handshake: set before we navigate, honoured by the state loop on the next page ---- */
 const AUTOPLAY_KEY = 'ytmd:autoplay'
@@ -205,6 +223,9 @@ export function enforceVolume(v: HTMLVideoElement) {
   if (desiredVolume === null || seekMuted) return
   if (Math.abs(v.volume - desiredVolume) > 0.004) v.volume = desiredVolume
 }
+// YouTube resets the volume to 100% when a song starts / changes; waiting for the next poll let that blip through. Undo it the instant it happens.
+for (const ev of ['volumechange', 'loadstart', 'emptied', 'loadeddata', 'play', 'playing'])
+  document.addEventListener(ev, (e) => { if (e.target instanceof HTMLVideoElement) enforceVolume(e.target) }, true)
 let syncTimer: ReturnType<typeof setTimeout> | undefined
 export const getDesiredVolume = () => desiredVolume
 
@@ -275,8 +296,20 @@ export async function runCommand(cmd: Command) {
       modes = { ...modes, repeat: modes.repeat === 'NONE' ? 'ALL' : modes.repeat === 'ALL' ? 'ONE' : 'NONE' }
       saveModes(); if (v) v.loop = modes.repeat === 'ONE'
       return log(`repeat ${modes.repeat}`)
-    case 'like': return click('ytmusic-like-button-renderer #button-shape-like button')
-    case 'dislike': return click('ytmusic-like-button-renderer #button-shape-dislike button')
+    case 'like': {
+      const id = currentVideoId()
+      if (!id || !hooks.like) return click('ytmusic-player-bar ytmusic-like-button-renderer #button-shape-like button')
+      const now = knownLike(id) ?? (await hooks.likeStatusOf?.(id).catch(() => undefined)) ?? 'INDIFFERENT'
+      const want: LikeStatus = now === 'LIKE' ? 'INDIFFERENT' : 'LIKE'
+      likeOverride.set(id, want)                                   // shows immediately
+      try { await hooks.like(id, want === 'LIKE'); log(`${want === 'LIKE' ? 'liked' : 'unliked'} ${id}`) }
+      catch (e) {
+        log(`like via the API failed (${e}); trying the page's own button`)
+        likeOverride.delete(id); click('ytmusic-player-bar ytmusic-like-button-renderer #button-shape-like button')
+      }
+      return
+    }
+    case 'dislike': return click('ytmusic-player-bar ytmusic-like-button-renderer #button-shape-dislike button')
     case 'playTrack': {
       const q = new URLSearchParams({ v: cmd.videoId })
       if (cmd.playlistId) q.set('list', cmd.playlistId)

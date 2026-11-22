@@ -1,5 +1,5 @@
 import { webFrame } from 'electron'
-import { log } from './commands'
+import { hooks, likeOverride, log } from './commands'
 import type { Item, ItemKind, QueueItem, RpcMap, RpcMethod, Shelf } from '@shared/types'
 
 const ORIGIN = 'https://music.youtube.com'
@@ -244,7 +244,7 @@ const handlers: { [K in RpcMethod]: (a: RpcMap[K]['args']) => Promise<RpcMap[K][
     const id = playlistId.replace(/^VL/, '')
     const ids = (videoIds?.length ? videoIds : [videoId]).filter(Boolean)
     let res: any
-    if (id === 'LM') for (const v of ids) res = await innertube('like/like', { target: { videoId: v } })
+    if (id === 'LM') for (const v of ids) { res = await innertube('like/like', { target: { videoId: v } }); likeOverride.set(v, 'LIKE') }
     else res = await innertube('browse/edit_playlist', { playlistId: id, actions: ids.map((v) => ({ action: 'ACTION_ADD_VIDEO', addedVideoId: v, dedupeOption: 'DEDUPE_OPTION_SKIP' })) })
     if (res?.status && res.status !== 'STATUS_SUCCEEDED') throw new Error(`YouTube Music said ${res.status}`)
     log(`added ${ids.length} song(s) to ${id}`)
@@ -297,7 +297,7 @@ const handlers: { [K in RpcMethod]: (a: RpcMap[K]['args']) => Promise<RpcMap[K][
   },
   removeFromPlaylist: async ({ playlistId, videoId, setVideoId }) => {
     const id = playlistId.replace(/^VL/, '')
-    if (id === 'LM') await innertube('like/removelike', { target: { videoId } })       // Liked Music: un-like it
+    if (id === 'LM') { await innertube('like/removelike', { target: { videoId } }); likeOverride.set(videoId, 'INDIFFERENT') }       // Liked Music: un-like it
     else await innertube('browse/edit_playlist', { playlistId: id, actions: [{ action: 'ACTION_REMOVE_VIDEO', removedVideoId: videoId, ...(setVideoId ? { setVideoId } : {}) }] })
     return { ok: true as const }
   },
@@ -346,4 +346,23 @@ export function rpc<K extends RpcMethod>(method: K, args: RpcMap[K]['args']): Pr
   const h = handlers[method]
   if (!h) throw new Error(`unknown RPC method ${method}`)
   return h(args)
+}
+
+// like / unlike the playing song (see commands.ts)
+hooks.likeStatusOf = async (videoId) => {
+  const res = await innertube('next', { videoId, isAudioOnly: true })
+  let found: string | undefined
+  const walk = (o: Any, d = 0): void => {
+    if (found || !o || typeof o !== 'object' || d > 40) return
+    const b = o.likeButtonRenderer
+    if (b && (!b.target?.videoId || b.target.videoId === videoId) && typeof b.likeStatus === 'string') { found = b.likeStatus; return }
+    for (const k in o) walk(o[k], d + 1)
+  }
+  walk(res)
+  if (!found) throw new Error('no like status in the response')
+  return found === 'LIKE' ? 'LIKE' : found === 'DISLIKE' ? 'DISLIKE' : 'INDIFFERENT'
+}
+hooks.like = async (videoId, on) => {
+  const res = await innertube(on ? 'like/like' : 'like/removelike', { target: { videoId } })
+  if (res?.status && res.status !== 'STATUS_SUCCEEDED') throw new Error(`YouTube Music said ${res.status}`)
 }

@@ -36,7 +36,7 @@ export function PartyButton() {
 
   // the circle grows into a pill that says who you're with (and shrinks back when the party ends)
   const label = st.role === 'guest' ? (st.hostName ? `Listening with ${st.hostName}` : st.connected ? 'Listening along' : 'Connecting…')
-    : st.role === 'host' ? `Hosting · ${st.listeners ?? 0} listening` : ''
+    : st.role === 'host' ? (st.names?.length ? `Hosting · ${st.names.length > 2 ? `${st.names.slice(0, 2).join(', ')} +${st.names.length - 2}` : st.names.join(', ')}` : 'Hosting · waiting for friends') : ''
   const kept = useRef(label)
   if (label) kept.current = label                      // keep the words while the pill closes
   const measure = useRef<HTMLSpanElement>(null)
@@ -64,7 +64,7 @@ export function PartyButton() {
             <button onClick={() => run('host', async () => window.ytm.partyHost(await myName()))} disabled={!!busy}
               className="mt-3 h-9 w-full rounded-full blue-glass text-[13.5px] font-semibold disabled:opacity-50">{busy === 'host' ? 'Starting…' : 'Start a party'}</button>
             <div className="my-3 flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/35"><span className="h-px flex-1 bg-white/10" />or join<span className="h-px flex-1 bg-white/10" /></div>
-            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (code.trim()) run('join', () => window.ytm.partyJoin(code)) }}>
+            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (code.trim()) run('join', async () => window.ytm.partyJoin(code, await myName())) }}>
               <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Room code" spellCheck={false} autoComplete="off" maxLength={20} disabled={!!busy}
                 className="h-9 min-w-0 flex-1 rounded-full bg-white/10 px-4 text-[13.5px] uppercase tracking-wider outline-none placeholder:normal-case placeholder:tracking-normal placeholder:text-mute focus:ring-2 focus:ring-accent" />
               <button type="submit" disabled={!code.trim() || !!busy} className="h-9 rounded-full bg-white/10 px-4 text-[13px] font-medium hover:bg-white/15 disabled:opacity-40">{busy === 'join' ? '…' : 'Join'}</button>
@@ -77,14 +77,15 @@ export function PartyButton() {
               <span className="min-w-0 flex-1 truncate font-mono text-[15px] font-semibold tracking-wider">{pretty(st.code ?? '')}</span>
               <button onClick={copy} aria-label="Copy room code" className="grid size-8 place-items-center rounded-full bg-white/10 hover:bg-white/20">{copied ? <Check size={15} /> : <Copy size={15} />}</button>
             </div>
-            <p className="mt-2 text-[12.5px] text-white/70">{st.connected ? `${st.listeners ?? 0} listening` : 'Reconnecting…'}</p>
+            <p className="mt-2 text-[12.5px] text-white/70">{st.connected ? (st.names?.length ? `Listening with you: ${st.names.join(', ')}` : 'Nobody has joined yet') : 'Reconnecting…'}</p>
             <p className="mt-1 text-[12px] leading-snug text-mute">With Discord status on, friends can also press <b>Join</b> on your Discord profile while music plays (their Triad must be open).</p>
             <button onClick={() => run('host', () => window.ytm.partyLeave())} className="mt-3 h-9 w-full rounded-full bg-white/10 text-[13.5px] font-medium hover:bg-white/15">End party</button>
           </>)}
 
           {st.role === 'guest' && (<>
             <p className="mt-1 text-[12.5px] leading-snug text-mute">You’re listening along. Your player follows the host’s song, pause and position.</p>
-            <p className="mt-3 truncate text-[13px] text-white/85">{st.hostTrack ?? (st.connected ? 'Waiting for the host…' : 'Reconnecting…')}</p>
+            {st.hostName && <p className="mt-3 text-[13px] font-semibold">Listening with {st.hostName}</p>}
+            <p className="mt-1 truncate text-[13px] text-white/85">{st.hostTrack ?? (st.connected ? 'Waiting for the host…' : 'Reconnecting…')}</p>
             <button onClick={() => run('host', () => window.ytm.partyLeave())} className="mt-3 h-9 w-full rounded-full bg-white/10 text-[13.5px] font-medium hover:bg-white/15">Leave party</button>
           </>)}
 

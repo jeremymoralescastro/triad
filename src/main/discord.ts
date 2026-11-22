@@ -35,14 +35,16 @@ class Presence {
   private timer: ReturnType<typeof setTimeout> | undefined
   private partyCode: string | null = null      // hosting a listening party: show a Join button on the profile
   private partySize = 1
+  private partyWith = ''                         // "with Alice, Bob" (host) or "with <host>" (guest)
   private lastState: PlayerState | null = null
   /** a friend pressed Join on our activity: Discord hands us the room code (the "secret") */
   onJoin: ((secret: string) => void) | null = null
 
-  setParty(code: string | null, size = 1) {
+  setParty(code: string | null, size = 1, who: string[] = []) {
     const n = code ? Math.max(1, size) : 1
-    if (code === this.partyCode && n === this.partySize) return
-    this.partyCode = code; this.partySize = n
+    const w = who.length ? 'with ' + (who.length > 3 ? `${who.slice(0, 3).join(', ')} +${who.length - 3}` : who.join(', ')) : ''
+    if (code === this.partyCode && n === this.partySize && w === this.partyWith) return
+    this.partyCode = code; this.partySize = n; this.partyWith = w
     if (this.lastState) this.update(this.lastState)
   }
 
@@ -103,11 +105,11 @@ class Presence {
     if (s.videoId && s.title && !s.paused && !s.adActive) {
       const start = Math.round((Date.now() - s.currentTime * 1000) / 1000) * 1000
       activity = {
-        type: 2,                                              // "Listening to"
+        type: this.partyCode ? 0 : 2,                         // "Listening to"; while hosting a party use "Playing" so Discord shows the Join button
         details: (cleanTitle(s.title, s.artist) || s.title).slice(0, 120),     // same cleaned title Triad shows
-        state: (s.artist || 'Unknown artist').slice(0, 120),
+        state: ((s.artist || 'Unknown artist') + (this.partyWith ? ` · ${this.partyWith}` : '')).slice(0, 120),
         timestamps: s.duration > 0 ? { start, end: start + Math.round(s.duration) * 1000 } : { start },
-        assets: { ...(s.artwork ? { large_image: s.artwork, large_text: s.album || s.title } : {}) },
+        assets: { ...(s.artwork ? { large_image: s.artwork, large_text: this.partyWith ? `Listening ${this.partyWith} on Triad` : (s.album || s.title) } : {}) },
         // hosting a party: friends see a Join button; the secret is the room code (only the person pressing Join receives it)
         ...(this.partyCode ? {
           party: { id: 'triad-' + createHash('sha256').update(this.partyCode).digest('hex').slice(0, 16), size: [this.partySize, Math.max(10, this.partySize)] },

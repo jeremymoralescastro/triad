@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, Heart, Pause, Play, Plus, Search, Shuffle } from 'lucide-react'
 import { usePlayer } from '@/lib/store'
 import { useIsCurrent } from '@/components/PlayFab'
@@ -16,12 +16,39 @@ export function PlaylistView({ view, onOpen }: { view: PV; onOpen: (it: Item) =>
   const paused = usePlayer((s) => s.paused)
   const playing = isCurrent && !paused
   const signedIn = usePlayer((s) => s.loggedIn)
+  const isLM = /LM$/.test(view.playlistId ?? view.browseId)
+  // Liked Music: a like / unlike shows up in the open list at once (the real list is fetched a moment later and takes over)
+  const [likeDelta, setLikeDelta] = useState<{ add: Item[]; drop: Set<string> }>({ add: [], drop: new Set() })
+  useEffect(() => {
+    if (!isLM) return
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const h = (e: Event) => {
+      const d = (e as CustomEvent).detail as { videoId?: string; liked?: boolean; item?: Item } | undefined
+      if (d?.videoId) setLikeDelta((x) => d.liked && d.item
+        ? { add: [d.item, ...x.add.filter((a) => a.videoId !== d.videoId)], drop: new Set([...x.drop].filter((v) => v !== d.videoId)) }
+        : { add: x.add.filter((a) => a.videoId !== d.videoId), drop: new Set(x.drop).add(d.videoId) })
+      for (const ms of [1500, 5000]) timers.push(setTimeout(() => setNonce((n) => n + 1), ms))
+    }
+    window.addEventListener('triad:likes', h)
+    return () => { window.removeEventListener('triad:likes', h); timers.forEach(clearTimeout) }
+  }, [isLM])
   const { data, error, loading } = useRpc('playlist', { browseId: view.browseId }, true, nonce + (signedIn ? 1000 : 0))
+  useEffect(() => {                                                   // the real list caught up: drop what it already reflects
+    if (!data) return
+    const ids = new Set(data.flatMap((sh) => sh.items).map((i) => i.videoId))
+    setLikeDelta((x) => (x.add.length || x.drop.size)
+      ? { add: x.add.filter((a) => !ids.has(a.videoId)), drop: new Set([...x.drop].filter((v) => ids.has(v))) } : x)
+  }, [data])
+  const shown = !isLM || (!likeDelta.add.length && !likeDelta.drop.size) ? data : (() => {
+    const base = data ?? []
+    const sheets = base.length ? base : likeDelta.add.length ? [{ title: '', items: [] as Item[] }] : []
+    return sheets.map((sh, i) => ({ ...sh, items: [...(i === 0 ? likeDelta.add.filter((a) => !sh.items.some((it) => it.videoId === a.videoId)) : []), ...sh.items].filter((it) => !likeDelta.drop.has(it.videoId ?? '')) }))
+  })()
   const firstSong = (data ?? []).flatMap((s) => s.items).find((i) => i.videoId)?.videoId   // albums opened by id have no playlist id: play from the first track
   const editable = /^(VL)?(PL|LM$|sc-pl:)/.test(view.playlistId ?? view.browseId)
   const [filter, setFilter] = useState<string | null>(null)   // null = filter box closed
   const q = (filter ?? '').trim().toLowerCase()
-  const shelves = (data ?? [])
+  const shelves = (shown ?? [])
     .map((s) => ({ ...s, items: q ? s.items.filter((i) => `${i.title} ${i.artist ?? ''} ${i.subtitle} ${i.album ?? ''}`.toLowerCase().includes(q)) : s.items }))
     .filter((s) => s.items.length)
 

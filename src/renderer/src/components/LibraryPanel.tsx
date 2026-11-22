@@ -34,6 +34,7 @@ export function LibraryPanel({ view, go }: { view: View; go: (v: View) => void }
   const [note, setNote] = useState<string | null>(null)
   const flash = (m: string) => { setNote(m); setTimeout(() => setNote((n) => (n === m ? null : n)), 5000) }
   const refreshSoon = () => [1500, 5000, 12000].forEach((ms) => setTimeout(() => setNonce((x) => x + 1), ms))
+  useEffect(() => { const h = () => setTimeout(() => setNonce((x) => x + 1), 300); window.addEventListener('triad:likes', h); return () => window.removeEventListener('triad:likes', h) }, [])
 
   const base = useMemo<Entry[]>(() => {
     const seen = new Set<string>(['LM'])

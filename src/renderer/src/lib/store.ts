@@ -46,7 +46,13 @@ function optimistic(cmd: Command) {
     case 'pause': return hold('paused', true, 2500)
     case 'seek': return hold('currentTime', cmd.seconds, 2000, (n) => Math.abs(n.currentTime - cmd.seconds) < 1.5)
     case 'volume': return hold('volume', cmd.value, 1500, (n) => Math.abs(n.volume - cmd.value) < 1.5)
-    case 'like': return hold('likeStatus', s.likeStatus === 'LIKE' ? 'INDIFFERENT' : 'LIKE', 3000)
+    case 'like': {
+      const want = s.likeStatus === 'LIKE' ? 'INDIFFERENT' : 'LIKE'
+      const dur = s.duration > 0 ? `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}` : undefined
+      if (s.videoId) window.dispatchEvent(new CustomEvent('triad:likes', { detail: { videoId: s.videoId, liked: want === 'LIKE',          // an open Liked Music list adds / drops the row at once
+        item: { kind: 'song', title: s.title, subtitle: s.artist, artist: s.artist, videoId: s.videoId, thumbnail: s.artwork ?? undefined, album: s.album || undefined, duration: dur } } }))
+      return hold('likeStatus', want, 3000)
+    }
     case 'shuffle': return hold('shuffle', !s.shuffle, 2500)
     case 'repeat': return hold('repeat', s.repeat === 'NONE' ? 'ALL' : s.repeat === 'ALL' ? 'ONE' : 'NONE', 2500)
     case 'speed': return hold('speed', cmd.value, 2500)

@@ -65,7 +65,7 @@ export function SongMenuHost() {
     if (!m) return
     const song = m.song, name = c === 'LM' ? 'Liked Music' : c.title
     setM(null)
-    try { await window.ytm.rpc('addToPlaylist', { playlistId: c === 'LM' ? 'LM' : c.id, videoId: song.videoId }); toast(`Added to ${name}`) }
+    try { await window.ytm.rpc('addToPlaylist', { playlistId: c === 'LM' ? 'LM' : c.id, videoId: song.videoId }); toast(`Added to ${name}`); if (c === 'LM') window.dispatchEvent(new CustomEvent('triad:likes', { detail: { videoId: song.videoId, liked: true, item: { kind: 'song', title: song.title, subtitle: song.artist, artist: song.artist, videoId: song.videoId, thumbnail: song.thumbnail, album: song.album } } })) }
     catch { toast(`Couldn’t add to ${name}`) }
   }
 

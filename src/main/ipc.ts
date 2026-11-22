@@ -239,7 +239,8 @@ export function wireIpc(first: BrowserWindow, firstBackend: Backend, makeEngine:
     send, backend: () => backend,
     emit: (s) => {
       if (!ui.isDestroyed()) ui.webContents.send(CH.partyStatus, s)
-      discord.setParty(s.role === 'host' ? s.code ?? null : null, (s.listeners ?? 0) + 1)       // hosting = a Join button on your Discord profile
+      const who = s.role === 'host' ? (s.names ?? []) : s.role === 'guest' && s.hostName ? [s.hostName] : []
+      discord.setParty(s.role === 'host' ? s.code ?? null : null, (s.listeners ?? 0) + 1, who)       // hosting = a Join button on your Discord profile; names show who you're with
     }
   })
   discord.onJoin = (code) => {                                  // a friend pressed Join on Discord
@@ -251,7 +252,7 @@ export function wireIpc(first: BrowserWindow, firstBackend: Backend, makeEngine:
   ipcMain.handle(CH.updateCheck, () => checkNow())
   ipcMain.handle(CH.updateInstall, () => { installNow() })
   ipcMain.handle(CH.partyHost, (_e, name?: string) => party.host(String(name ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 40)))
-  ipcMain.handle(CH.partyJoin, (_e, code: string) => party.join(String(code ?? '')))
+  ipcMain.handle(CH.partyJoin, (_e, code: string, name?: string) => party.join(String(code ?? ''), String(name ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 40)))
   ipcMain.handle(CH.partyLeave, () => party.leave())
   ipcMain.handle(CH.partyGet, () => party.status())
   ipcMain.handle(CH.aiKey, (_e, op?: { set?: string }) => { if (op && typeof op.set === 'string') setAiKey(op.set); return hasAiKey() })

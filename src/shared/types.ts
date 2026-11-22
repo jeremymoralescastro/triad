@@ -92,6 +92,7 @@ export interface PartyStatus {
   connected: boolean
   code?: string                 // 12 letters/digits (host: share it; guest: the one you joined)
   listeners?: number            // host: how many are listening right now
+  names?: string[]              // host: who is listening right now
   hostName?: string             // guest: the host's name (their account name)
   hostTrack?: string            // guest: what the host is playing
   note?: string                 // e.g. the host is on the other service

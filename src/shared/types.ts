@@ -77,12 +77,22 @@ export type Command =
   | { type: 'speed'; value: number }
   | { type: 'fx'; reverb: number; flanger: number }
 
+export interface UpdateStatus {
+  state: 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'ready' | 'error'
+  current: string               // the version you're running
+  version?: string              // the newer version, if any
+  percent?: number              // download progress
+  url?: string                  // where to get it, when Triad can't update itself (Mac)
+  message?: string
+}
+
 /** Listening party: one person hosts, others join with a room code and follow along */
 export interface PartyStatus {
   role: 'none' | 'host' | 'guest'
   connected: boolean
   code?: string                 // 12 letters/digits (host: share it; guest: the one you joined)
   listeners?: number            // host: how many are listening right now
+  hostName?: string             // guest: the host's name (their account name)
   hostTrack?: string            // guest: what the host is playing
   note?: string                 // e.g. the host is on the other service
 }
@@ -180,6 +190,10 @@ export const CH = {
   partyLeave: 'ytm:party-leave',
   partyGet: 'ytm:party-get',
   partyStatus: 'ytm:party-status',
+  updateGet: 'ytm:update-get',
+  updateCheck: 'ytm:update-check',
+  updateInstall: 'ytm:update-install',
+  updateStatus: 'ytm:update-status',
   videoFrame: 'ytm:video-frame',
   videoOpen: 'ytm:video-open',
   videoClose: 'ytm:video-close',

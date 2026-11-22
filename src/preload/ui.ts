@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webFrame } from 'electron'
-import { CH, type Backend, type Command, type LoginStatus, type LyricsResult, type MainSettings, type PartyStatus, type PlayerState, type RpcMap, type StatsResult, type RpcMethod } from '@shared/types'
+import { CH, type Backend, type Command, type LoginStatus, type LyricsResult, type MainSettings, type PartyStatus, type PlayerState, type UpdateStatus, type RpcMap, type StatsResult, type RpcMethod } from '@shared/types'
 
 /** what the UI has seen of every song (so a click can show the new song instantly) and the last "up next" list */
 interface TrackMeta { title: string; artist: string; thumbnail?: string; duration?: string }
@@ -53,7 +53,15 @@ const api = {
   /** AI playlists: is a key stored (call with a string to store / '' to remove it) */
   aiKey: (set?: string): Promise<boolean> => ipcRenderer.invoke(CH.aiKey, set === undefined ? {} : { set }),
   aiStatus: (): Promise<{ provider: 'claude' | 'ollama' | 'none'; model?: string }> => ipcRenderer.invoke(CH.aiStatus),
-  partyHost: (): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyHost),
+  partyHost: (name?: string): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyHost, name ?? ''),
+  updateStatus: (): Promise<UpdateStatus> => ask<UpdateStatus>(CH.updateGet),
+  updateCheck: (): Promise<UpdateStatus> => ipcRenderer.invoke(CH.updateCheck),
+  updateInstall: (): Promise<void> => ipcRenderer.invoke(CH.updateInstall),
+  onUpdateStatus(cb: (s: UpdateStatus) => void) {
+    const h = (_: unknown, s: UpdateStatus) => cb(s)
+    ipcRenderer.on(CH.updateStatus, h)
+    return () => { ipcRenderer.off(CH.updateStatus, h) }
+  },
   partyJoin: (code: string): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyJoin, code),
   partyLeave: (): Promise<PartyStatus> => ipcRenderer.invoke(CH.partyLeave),
   partyStatus: (): Promise<PartyStatus> => ask<PartyStatus>(CH.partyGet),

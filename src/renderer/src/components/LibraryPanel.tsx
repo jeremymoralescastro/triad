@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowDown, ArrowUp, ChevronRight, Eye, EyeOff as HideIcon, Folder, Heart, Pencil, Plus, Sparkles, Trash2, Volume2 } from 'lucide-react'
 import { smartSongs } from '@/lib/smartPlaylist'
+import { hueShift } from '@/lib/hue'
 import { usePlayer } from '@/lib/store'
 import { useRpc } from '@/lib/useRpc'
 import { openTarget, type View } from '@/lib/view'
@@ -92,8 +93,8 @@ export function LibraryPanel({ view, go }: { view: View; go: (v: View) => void }
         const dy = was - now
         if (newlyPlaying && k === playingKey) {
           n.animate([
-            { transform: `translateY(${dy}px) scale(1.04)`, boxShadow: '0 14px 34px rgba(0,0,0,.6)', backgroundColor: 'rgba(76,141,255,.22)' },
-            { transform: 'translateY(0) scale(1)', boxShadow: '0 0 0 rgba(0,0,0,0)', backgroundColor: 'rgba(76,141,255,0)' }
+            { transform: `translateY(${dy}px) scale(1.04)`, boxShadow: '0 14px 34px rgba(0,0,0,.6)', backgroundColor: hueShift('rgba(76,141,255,.22)') },
+            { transform: 'translateY(0) scale(1)', boxShadow: '0 0 0 rgba(0,0,0,0)', backgroundColor: hueShift('rgba(76,141,255,0)') }
           ], { duration: 750, easing: 'cubic-bezier(.2,.8,.2,1)' })
         } else {
           n.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: 480, easing: 'cubic-bezier(.2,.8,.2,1)' })

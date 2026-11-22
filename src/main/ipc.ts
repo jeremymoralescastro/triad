@@ -2,6 +2,7 @@ import { BrowserWindow, dialog, globalShortcut, ipcMain, session, shell } from '
 import { getLyrics } from './lyrics'
 import { aiStatus, hasAiKey, setAiKey, suggestPlaylist } from './ai'
 import { party } from './party'
+import { checkNow, getUpdateStatus, installNow, setUpdateEmitter } from './updater'
 import { clearStats, getStats, trackListening } from './stats'
 import { getSettings, setSettings } from './settings'
 import { holdSessionSaves, loadSession, saveSession } from './session'
@@ -245,7 +246,11 @@ export function wireIpc(first: BrowserWindow, firstBackend: Backend, makeEngine:
     if (!ui.isDestroyed()) { if (ui.isMinimized()) ui.restore(); ui.show(); ui.focus() }
     party.join(code).catch((e) => console.log('[party] join from Discord failed:', String(e?.message ?? e)))
   }
-  ipcMain.handle(CH.partyHost, () => party.host())
+  setUpdateEmitter((s) => { if (!ui.isDestroyed()) ui.webContents.send(CH.updateStatus, s) })
+  ipcMain.handle(CH.updateGet, () => getUpdateStatus())
+  ipcMain.handle(CH.updateCheck, () => checkNow())
+  ipcMain.handle(CH.updateInstall, () => { installNow() })
+  ipcMain.handle(CH.partyHost, (_e, name?: string) => party.host(String(name ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 40)))
   ipcMain.handle(CH.partyJoin, (_e, code: string) => party.join(String(code ?? '')))
   ipcMain.handle(CH.partyLeave, () => party.leave())
   ipcMain.handle(CH.partyGet, () => party.status())

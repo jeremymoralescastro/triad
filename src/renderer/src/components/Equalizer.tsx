@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as RKeyEvent, type PointerEvent as RPointerEvent } from 'react'
+import { hueShift } from '@/lib/hue'
 import { EQ_FREQS } from '@shared/types'
 
 const W = 400, H = 200, PAD = 28, TOP = 34, BOT = 150, MIN = -12, MAX = 12
@@ -95,7 +96,7 @@ export function Equalizer({ gains, onChange, disabled = false }: { gains: number
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
         <defs>
           <linearGradient id={`${id}w`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#6fb0ff" stopOpacity=".78" /><stop offset=".55" stopColor="#4c8dff" stopOpacity=".34" /><stop offset="1" stopColor="#1f4b8f" stopOpacity=".08" />
+            <stop offset="0" style={{ stopColor: hueShift('#6fb0ff') }} stopOpacity=".78" /><stop offset=".55" style={{ stopColor: hueShift('#4c8dff') }} stopOpacity=".34" /><stop offset="1" style={{ stopColor: hueShift('#1f4b8f') }} stopOpacity=".08" />
           </linearGradient>
           <filter id={`${id}b`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="9" /></filter>
           <filter id={`${id}g`} x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="2.5" /></filter>
@@ -108,13 +109,13 @@ export function Equalizer({ gains, onChange, disabled = false }: { gains: number
         {/* the pool */}
         <path d={fill} fill={`url(#${id}w)`} />
         <g clipPath={`url(#${id}c)`}>
-          <ellipse className="eq-drift-a" cx="90" cy="120" rx="70" ry="22" fill="#cfe4ff" opacity=".22" filter={`url(#${id}b)`} />
-          <ellipse className="eq-drift-b" cx="250" cy="105" rx="90" ry="18" fill="#8fc0ff" opacity=".24" filter={`url(#${id}b)`} />
+          <ellipse className="eq-drift-a" cx="90" cy="120" rx="70" ry="22" style={{ fill: hueShift('#cfe4ff') }} opacity=".22" filter={`url(#${id}b)`} />
+          <ellipse className="eq-drift-b" cx="250" cy="105" rx="90" ry="18" style={{ fill: hueShift('#8fc0ff') }} opacity=".24" filter={`url(#${id}b)`} />
           <ellipse className="eq-drift-c" cx="340" cy="135" rx="60" ry="24" fill="#ffffff" opacity=".14" filter={`url(#${id}b)`} />
         </g>
         {/* surface: a soft glow, a gently bobbing second surface, and the crisp line */}
-        <path d={line} fill="none" stroke="#7fb6ff" strokeWidth="6" strokeOpacity=".55" filter={`url(#${id}g)`} />
-        <path className="eq-bob" d={line} fill="none" stroke="#cfe4ff" strokeWidth="1.2" strokeOpacity=".4" />
+        <path d={line} fill="none" style={{ stroke: hueShift('#7fb6ff') }} strokeWidth="6" strokeOpacity=".55" filter={`url(#${id}g)`} />
+        <path className="eq-bob" d={line} fill="none" style={{ stroke: hueShift('#cfe4ff') }} strokeWidth="1.2" strokeOpacity=".4" />
         <path d={line} fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeOpacity=".92" />
 
         {/* band handles + labels */}

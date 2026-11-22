@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { hueShift } from '@/lib/hue'
 import { usePlayer } from '@/lib/store'
 import { useSettings } from '@/lib/settings'
 
@@ -43,9 +44,9 @@ export function Wallpaper() {
     <div className="wp-root pointer-events-none fixed inset-0 -z-0 overflow-hidden bg-black" aria-hidden>
       {/* soft pools of light: plain gradients, no blur filters */}
       <div className="wp-pools absolute inset-0" style={{ background:
-        'radial-gradient(closest-side at 10% 6%, rgba(172,187,255,.34), transparent) 0 0 / 760px 760px no-repeat, ' +
-        'radial-gradient(closest-side at 92% 14%, rgba(100,155,194,.30), transparent) 100% 0 / 840px 840px no-repeat, ' +
-        'radial-gradient(closest-side at 50% 50%, rgba(152,206,245,.20), transparent) 30% 100% / 940px 760px no-repeat' }} />
+        'radial-gradient(closest-side at 10% 6%, ' + hueShift('rgba(172,187,255,.34)') + ', transparent) 0 0 / 760px 760px no-repeat, ' +
+        'radial-gradient(closest-side at 92% 14%, ' + hueShift('rgba(100,155,194,.30)') + ', transparent) 100% 0 / 840px 840px no-repeat, ' +
+        'radial-gradient(closest-side at 50% 50%, ' + hueShift('rgba(152,206,245,.20)') + ', transparent) 30% 100% / 940px 760px no-repeat' }} />
       {on && layers.map((l) => <Wash key={l.id} img={l.img} on={l.on} />)}
     </div>
   )

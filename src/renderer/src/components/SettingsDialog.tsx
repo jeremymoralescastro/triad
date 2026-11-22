@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, RotateCcw, X } from 'lucide-react'
-import type { MainSettings } from '@shared/types'
+import type { MainSettings, UpdateStatus } from '@shared/types'
 import { THEMES, useSettings } from '@/lib/settings'
+import { BASE_HUE } from '@/lib/hue'
 import { Equalizer } from './Equalizer'
 
 function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -73,6 +74,18 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     window.ytm.setSettings(patch).then(setMain).catch(() => {})
   }
 
+  const [upd, setUpd] = useState<UpdateStatus | null>(null)
+  useEffect(() => { window.ytm.updateStatus().then(setUpd).catch(() => {}); return window.ytm.onUpdateStatus(setUpd) }, [])
+  const isMac = /Mac/i.test(navigator.userAgent)
+  const updText = !upd ? '' : upd.state === 'checking' ? 'Checking…'
+    : upd.state === 'current' ? 'You’re up to date.'
+    : upd.state === 'available' ? `Version ${upd.version} is available.${upd.url ? ' Download it from GitHub.' : ''}`
+    : upd.state === 'downloading' ? `Downloading version ${upd.version}… ${upd.percent ?? 0}%`
+    : upd.state === 'ready' ? `Version ${upd.version} is ready. It also installs when you close Triad.`
+    : upd.state === 'error' ? `Couldn’t check: ${upd.message ?? 'unknown error'}`
+    : isMac ? 'Updates on Mac are manual: check here, then download the new version.' : 'Triad checks for updates by itself while it runs.'
+  const updBusy = upd?.state === 'checking' || upd?.state === 'downloading'
+
   const TABS = [['appearance', 'Appearance'], ['equalizer', 'Equalizer'], ['playback', 'Playback'], ['discord', 'Discord'], ['ai', 'AI'], ['system', 'System']] as const
   const [tab, setTab] = useState<(typeof TABS)[number][0]>('appearance')
   const tabEls = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -109,6 +122,15 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 <button key={t.id} role="radio" aria-checked={ui.theme === t.id} onClick={() => ui.set({ theme: t.id })}
                   className={`h-7 rounded-full px-3 text-[13px] font-semibold transition-colors ${ui.theme === t.id ? 'blue-glass' : 'text-white/70 hover:text-white'}`}>{t.label}</button>
               ))}
+            </div>
+          </Row>
+          <Row title="Accent color" hint="Turns every blue in Triad into another color. Retro keeps its maroon.">
+            <div className="flex items-center gap-3">
+              <input type="range" className="hue-slider w-36" aria-label="Accent color" min={0} max={360} step={1} value={ui.hue ?? 0}
+                style={{ ['--hue-grad' as string]: `linear-gradient(90deg, ${Array.from({ length: 13 }, (_, i) => `hsl(${BASE_HUE + i * 30} 100% 65%)`).join(', ')})`, ['--thumb' as string]: `hsl(${BASE_HUE + (ui.hue ?? 0)} 100% 65%)` }}
+                onChange={(e) => ui.set({ hue: +e.target.value })} />
+              <button onClick={() => ui.set({ hue: 0 })} disabled={(ui.hue ?? 0) === 0}
+                className="h-7 rounded-full bg-white/10 px-3 text-[12.5px] font-semibold text-white/80 transition-colors hover:bg-white/15 hover:text-white disabled:pointer-events-none disabled:opacity-40">Reset</button>
             </div>
           </Row>
           <Row title="Interface size" hint="Zoom the whole app in or out.">
@@ -222,6 +244,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </Section>)}
 
         {tab === 'system' && (<Section title="System">
+          <Row title="Updates" hint={`Triad ${upd?.current ?? ''} · ${updText}`}>
+            {upd?.state === 'ready'
+              ? <button onClick={() => window.ytm.updateInstall()} className="h-8 shrink-0 rounded-full blue-glass px-3.5 text-[13px] font-semibold">Restart to update</button>
+              : upd?.state === 'available' && upd.url
+                ? <button onClick={() => window.ytm.openExternal(upd.url!)} className="h-8 shrink-0 rounded-full blue-glass px-3.5 text-[13px] font-semibold">Open download page</button>
+                : <button onClick={() => window.ytm.updateCheck()} disabled={updBusy} className="h-8 shrink-0 rounded-full bg-white/10 px-3.5 text-[13px] font-medium hover:bg-white/15 disabled:opacity-50">{updBusy ? 'Checking…' : 'Check for updates'}</button>}
+          </Row>
           <Row title="Launch at login" hint="Start Triad when you sign in to Windows (installed app only).">
             <Switch label="Launch at login" on={main?.launchAtLogin ?? false} onChange={(v) => setMainValue({ launchAtLogin: v })} />
           </Row>

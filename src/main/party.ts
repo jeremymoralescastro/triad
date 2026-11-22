@@ -12,7 +12,7 @@ const BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084
 const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'          // no 0/O/1/I, easy to read out loud
 const ID_OK = /^[A-Za-z0-9_-]{1,40}$/
 
-interface Remote { backend: Backend; videoId: string; title: string; artist: string; pos: number; paused: boolean; at: number; end?: boolean }
+interface Remote { backend: Backend; name: string; videoId: string; title: string; artist: string; pos: number; paused: boolean; at: number; end?: boolean }
 interface Hooks { send(c: Command): void; backend(): Backend; emit(s: PartyStatus): void }
 
 class Party {
@@ -23,6 +23,7 @@ class Party {
   private base = ''
   private connected = false
   private note = ''
+  private name = ''
   private myId = randomBytes(6).toString('hex')
   private timers: ReturnType<typeof setInterval>[] = []
   // host
@@ -42,6 +43,7 @@ class Party {
     const listeners = this.role === 'host' ? [...this.listeners.values()].filter((t) => now - t < 25_000).length : undefined
     return {
       role: this.role, connected: this.connected, code: this.code || undefined, listeners, note: this.note || undefined,
+      hostName: this.role === 'guest' && this.remote && !this.remote.end ? this.remote.name || undefined : undefined,
       hostTrack: this.role === 'guest' && this.remote && !this.remote.end ? `${this.remote.title}${this.remote.artist ? ' — ' + this.remote.artist : ''}` : undefined
     }
   }
@@ -63,8 +65,9 @@ class Party {
     c.on('message', (topic, payload) => this.onMessage(topic, payload.toString()))
   }
 
-  async host(): Promise<PartyStatus> {
+  async host(name = ''): Promise<PartyStatus> {
     await this.leave()
+    this.name = name
     let c: MqttClient | null = null, idx = -1
     for (let i = 0; i < BROKERS.length && !c; i++) { try { c = await this.open(BROKERS[i]); idx = i } catch { /* try the next relay */ } }
     if (!c) throw new Error('Couldn’t reach a relay server. Check your internet connection and try again.')
@@ -126,7 +129,7 @@ class Party {
     if (!this.client || !this.connected || !s || !s.videoId || s.adActive) return
     void heartbeat
     this.pub = { key: `${s.backend}|${s.videoId}|${s.paused}`, pos: s.currentTime, at: Date.now() }
-    this.client.publish(`${this.base}/s`, JSON.stringify({ v: 1, backend: s.backend, videoId: s.videoId, title: s.title, artist: s.artist, pos: s.currentTime, paused: s.paused }), { retain: true })
+    this.client.publish(`${this.base}/s`, JSON.stringify({ v: 1, name: this.name, backend: s.backend, videoId: s.videoId, title: s.title, artist: s.artist, pos: s.currentTime, paused: s.paused }), { retain: true })
   }
 
   private onMessage(topic: string, text: string) {
@@ -138,9 +141,9 @@ class Party {
     let m: any
     try { m = JSON.parse(text) } catch { return }
     if (!m || m.v !== 1) return
-    if (m.end) { this.remote = { backend: 'ytm', videoId: '', title: '', artist: '', pos: 0, paused: true, at: Date.now(), end: true }; this.note = 'The host ended the party.'; this.emit(); return }
+    if (m.end) { this.remote = { backend: 'ytm', name: '', videoId: '', title: '', artist: '', pos: 0, paused: true, at: Date.now(), end: true }; this.note = 'The host ended the party.'; this.emit(); return }
     if ((m.backend !== 'ytm' && m.backend !== 'sc') || typeof m.videoId !== 'string' || !ID_OK.test(m.videoId) || !Number.isFinite(m.pos) || m.pos < 0 || m.pos > 86_400) return
-    this.remote = { backend: m.backend, videoId: m.videoId, title: String(m.title ?? '').slice(0, 150), artist: String(m.artist ?? '').slice(0, 150), pos: m.pos, paused: !!m.paused, at: Date.now() }
+    this.remote = { backend: m.backend, name: String(m.name ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 40), videoId: m.videoId, title: String(m.title ?? '').slice(0, 150), artist: String(m.artist ?? '').slice(0, 150), pos: m.pos, paused: !!m.paused, at: Date.now() }
     this.note = ''
     this.emit(); this.apply()
   }

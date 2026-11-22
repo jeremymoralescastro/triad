@@ -2,6 +2,7 @@ import { app, BrowserWindow, globalShortcut } from 'electron'
 import { createEngineWindow, createScWindow, createUiWindow, markQuitting } from './windows'
 import { wireIpc } from './ipc'
 import { applyLoginItem, getSettings } from './settings'
+import { startUpdater } from './updater'
 
 // Make Chromium treat the hidden window like a normal media tab (SMTC + background audio).
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
@@ -19,6 +20,7 @@ app.whenReady().then(async () => {
   const ui = createUiWindow()
   wireIpc(engine, start, make, ui)
   applyLoginItem()
+  startUpdater()
 
   ui.on('closed', () => app.quit())
   app.on('second-instance', () => { if (ui.isMinimized()) ui.restore(); ui.focus() })

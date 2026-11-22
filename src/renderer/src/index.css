@@ -1,0 +1,244 @@
+@import "tailwindcss";
+@import "@fontsource-variable/manrope";
+
+@theme {
+  --font-sans: "Manrope Variable", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --color-ink: #000000;
+  --color-panel: rgba(255,255,255,.06);
+  --color-hover: rgba(255,255,255,.10);
+  --color-line: rgba(255,255,255,.12);
+  --color-text: #ffffff;
+  --color-mute: rgba(255,255,255,.64);
+  --color-brand: #1f4b8f;    /* the icon's deep blue: logo, gradients, covers */
+  --color-accent: #4c8dff;   /* same hue, lifted so it reads on black: active states, sliders, focus */
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--color-ink); color: var(--color-text); font-family: var(--font-sans); overflow: hidden; user-select: none; }
+.drag { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
+
+/* scrub + volume: white fill that turns accent blue on hover/drag; --p is the fill % */
+input[type="range"].slider { --fill: #fff; -webkit-appearance: none; appearance: none; height: 16px; width: 100%; background: transparent; cursor: pointer; }
+input[type="range"].slider:hover, input[type="range"].slider:active { --fill: var(--color-accent); }
+input[type="range"].slider::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, var(--fill) var(--p, 0%), #4d4d4d var(--p, 0%));
+}
+input[type="range"].slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%; background: #fff; opacity: 0; transition: opacity .12s;
+}
+input[type="range"].slider:hover::-webkit-slider-thumb, input[type="range"].slider:active::-webkit-slider-thumb { opacity: 1; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+::-webkit-scrollbar { width: 12px }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 6px; border: 3px solid transparent; background-clip: content-box }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.36); background-clip: content-box }
+::-webkit-scrollbar-corner { background: transparent }
+
+/* ---- dark frosted glass (no grain) ----
+   In @layer components so utility classes (absolute, hover:…) still win over them. */
+@layer components {
+  /* the accent blue as frosted, liquid-glass: translucent, blurred, with a bright top edge and a soft glow */
+  .blue-glass {
+    color: #fff;
+    background: linear-gradient(160deg, rgba(150,195,255,.30), rgba(76,141,255,.14)), rgba(70,120,230,.16);
+    -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 0 0 1px rgba(140,185,255,.30), 0 4px 14px rgba(0,0,0,.25);
+  }
+  .blue-glass:hover { background: linear-gradient(160deg, rgba(170,208,255,.38), rgba(76,141,255,.2)), rgba(70,120,230,.2); }
+.glass {
+  position: relative;
+  background: linear-gradient(160deg, rgba(255,255,255,.10), rgba(255,255,255,.025)), rgba(8,10,16,.55);
+  backdrop-filter: blur(26px) saturate(1.5);
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 24px 50px rgba(0,0,0,.5);
+}
+.lens {
+  background: linear-gradient(135deg, rgba(255,255,255,.22), rgba(255,255,255,.07));
+  backdrop-filter: blur(20px) saturate(1.6);
+  border: 1px solid rgba(255,255,255,.2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 8px 22px rgba(0,0,0,.4);
+}
+/* hover feedback for round glass buttons (home, etc.) */
+.glass-hover { transition: background-color .16s, border-color .16s, box-shadow .16s, transform .16s; }
+.glass-hover:hover { background-color: rgba(76,141,255,.24); border-color: rgba(130,175,255,.55); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 0 0 4px rgba(76,141,255,.12), 0 24px 50px rgba(0,0,0,.5); }
+.glass-hover:active { transform: scale(.95); }
+/* floating menus */
+.menu-pop {
+  background: linear-gradient(160deg, rgba(255,255,255,.12), rgba(255,255,255,.03)), rgba(14,16,24,.52);
+  backdrop-filter: blur(40px) saturate(1.8);
+  border: 1px solid rgba(255,255,255,.18);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 20px 48px rgba(0,0,0,.5);
+}
+}
+@media (prefers-reduced-transparency: reduce) { .glass, .lens, .menu-pop { backdrop-filter: none; background: #10131c; } }
+
+/* keep scrollbars clear of the rounded panel corners */
+::-webkit-scrollbar-track { margin: 24px 0; }
+
+/* artwork wash: each new song fades in over the last one */
+/* artwork wash: layers crossfade (new fades in while the old fades out), so there's never a pop */
+.wp-layer { opacity: 0; transition: opacity 2.6s cubic-bezier(.4,0,.2,1); }
+.wp-layer[data-on="1"] { opacity: var(--wp-o, .25); }
+@media (prefers-reduced-motion: reduce) { .wp-layer { animation: none } }
+
+/* a freshly created playlist row pops in */
+@keyframes row-in { from { opacity: 0; transform: translateY(-14px) scale(.96); background-color: rgba(76,141,255,.28) } to { opacity: 1; transform: none; background-color: rgba(76,141,255,0) } }
+.row-in { animation: row-in .7s cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) { .row-in { animation: none } }
+
+/* equalizer pool */
+@keyframes eq-drift-a { 0%,100% { transform: translate(0,0) } 50% { transform: translate(70px,-10px) } }
+@keyframes eq-drift-b { 0%,100% { transform: translate(0,0) } 50% { transform: translate(-80px,8px) } }
+@keyframes eq-drift-c { 0%,100% { transform: translate(0,0) } 50% { transform: translate(-50px,-12px) } }
+@keyframes eq-bob { 0%,100% { transform: translateY(2.5px) } 50% { transform: translateY(-2.5px) } }
+@keyframes eq-ripple { from { r: 6; opacity: .75 } to { r: 44; opacity: 0 } }
+.eq-drift-a { animation: eq-drift-a 9s ease-in-out infinite }
+.eq-drift-b { animation: eq-drift-b 12s ease-in-out infinite }
+.eq-drift-c { animation: eq-drift-c 10s ease-in-out infinite }
+.eq-bob { animation: eq-bob 3.2s ease-in-out infinite }
+.eq-ripple { animation: eq-ripple .95s cubic-bezier(.2,.7,.3,1) forwards }
+.eq-ripple-2 { animation-delay: .14s; opacity: 0 }
+@media (prefers-reduced-motion: reduce) { .eq-drift-a, .eq-drift-b, .eq-drift-c, .eq-bob { animation: none } }
+
+/* the next song slides forward into the "now playing" spot, and a new one peeks in behind it */
+@keyframes now-in { from { opacity: 0; transform: translateX(-38px) } to { opacity: 1; transform: none } }
+@keyframes peek-in { from { opacity: 0; transform: translateX(22px) scale(.8) } to { opacity: .8; transform: none } }
+.now-in { animation: now-in .55s cubic-bezier(.2,.8,.2,1) both; }
+.peek-in { animation: peek-in .6s cubic-bezier(.2,.8,.2,1) .12s both; }
+@media (prefers-reduced-motion: reduce) { .now-in, .peek-in { animation: none } }
+
+
+/* =====================================================================================
+   THEMES  (the default "glass" look is everything above; these override it by data-theme)
+   Unlayered on purpose: it beats Tailwind's layers without needing !important.
+   ===================================================================================== */
+
+/* ---------- Windows Vista / Aero ---------- */
+[data-theme='vista'] {
+  --font-sans: "Segoe UI", "Segoe UI Variable Text", system-ui, sans-serif;
+  --color-accent: #58bfff; --color-brand: #0d63b8;
+  --color-hover: rgba(255,255,255,.17); --color-mute: rgba(232,243,255,.8);
+}
+[data-theme='vista'] body { background: #08336b; text-shadow: 0 1px 2px rgba(0,25,70,.55); }
+[data-theme='vista'] .wp-root { background:
+  radial-gradient(70% 60% at 18% 0%, rgba(120,215,255,.75), transparent 60%),
+  radial-gradient(55% 55% at 92% 8%, rgba(70,235,200,.5), transparent 60%),
+  radial-gradient(80% 50% at 60% 100%, rgba(30,120,230,.55), transparent 70%),
+  linear-gradient(165deg, #0d4a9c 0%, #0b6fc4 42%, #08347a 100%); }
+[data-theme='vista'] .wp-pools { display: none; }
+[data-theme='vista'] { --wp-o: .16; }
+[data-theme='vista'] .glass {
+  background: linear-gradient(180deg, rgba(255,255,255,.42) 0, rgba(255,255,255,.14) 36%, rgba(255,255,255,.05) 37%, rgba(255,255,255,.12) 100%), rgba(36,110,180,.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5);
+  border: 1px solid rgba(0,22,56,.7); border-radius: 9px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.55), inset 0 1px 0 rgba(255,255,255,.8), 0 5px 16px rgba(0,22,70,.55);
+}
+[data-theme='vista'] .glass.size-11 { border-radius: 50%; }
+[data-theme='vista'] .glass-hover:hover { background: linear-gradient(180deg, rgba(255,255,255,.6) 0, rgba(130,210,255,.3) 40%, rgba(60,170,255,.22) 41%, rgba(120,215,255,.4) 100%), rgba(36,110,180,.4); box-shadow: inset 0 0 0 1px rgba(255,255,255,.75), 0 0 14px rgba(110,210,255,.7); border-color: rgba(0,22,56,.8); }
+[data-theme='vista'] .lens {
+  background: radial-gradient(120% 90% at 50% -10%, rgba(255,255,255,.95), rgba(255,255,255,0) 52%), linear-gradient(180deg, #46b0f5 0%, #0f79d4 48%, #0a5db3 52%, #36a6f0 100%);
+  -webkit-backdrop-filter: none; backdrop-filter: none; border: 1px solid #06325f;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.55), 0 3px 8px rgba(0,25,70,.6);
+}
+[data-theme='vista'] .menu-pop {
+  background: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,.06) 40%, rgba(255,255,255,.1)), rgba(14,62,118,.78);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
+  border: 1px solid rgba(0,22,56,.8); border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.45), 0 8px 24px rgba(0,22,70,.6);
+}
+[data-theme='vista'] .blue-glass {
+  background: linear-gradient(180deg, #a6dcff 0%, #4db0f3 46%, #1675cc 50%, #55bbf7 100%);
+  -webkit-backdrop-filter: none; backdrop-filter: none; border: 1px solid #07396e; text-shadow: 0 1px 1px rgba(0,30,80,.7);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.55), 0 2px 6px rgba(0,30,90,.45);
+}
+[data-theme='vista'] ::-webkit-scrollbar-thumb { background: linear-gradient(90deg, rgba(190,230,255,.7), rgba(80,170,240,.7)); border-color: rgba(0,30,80,.0); }
+[data-theme='vista'] ::-webkit-scrollbar-thumb:hover { background: linear-gradient(90deg, #d4efff, #6cc2ff); }
+[data-theme='vista'] input[type="range"].slider { --fill: #bfe6ff; }
+
+/* ---------- OLED: pure black, flat, nothing fancy ---------- */
+[data-theme='oled'] {
+  --color-ink: #000; --color-hover: rgba(255,255,255,.08); --color-mute: rgba(255,255,255,.55);
+  --color-accent: #5b9dff; --color-brand: #12254a;
+}
+[data-theme='oled'] body { background: #000; text-shadow: none; }
+[data-theme='oled'] .wp-root { background: #000; }
+[data-theme='oled'] .wp-root > * { display: none; }
+[data-theme='oled'] .glass { background: #000; -webkit-backdrop-filter: none; backdrop-filter: none; border: 1px solid #1b1b1b; border-radius: 16px; box-shadow: none; }
+[data-theme='oled'] .glass.size-11 { border-radius: 50%; }
+[data-theme='oled'] .glass-hover:hover { background: #131313; border-color: #333; box-shadow: none; }
+[data-theme='oled'] .lens { background: #fff; color: #000; -webkit-backdrop-filter: none; backdrop-filter: none; border: 0; box-shadow: none; }
+[data-theme='oled'] .lens svg { color: #000; }
+[data-theme='oled'] .menu-pop { background: #0a0a0a; -webkit-backdrop-filter: none; backdrop-filter: none; border: 1px solid #262626; border-radius: 14px; box-shadow: 0 10px 30px #000; }
+[data-theme='oled'] .blue-glass { background: var(--color-accent); color: #00122e; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; text-shadow: none; }
+[data-theme='oled'] .backdrop-blur-sm, [data-theme='oled'] .backdrop-blur-md { -webkit-backdrop-filter: none; backdrop-filter: none; }
+[data-theme='oled'] ::-webkit-scrollbar-thumb { background: #2a2a2a; }
+[data-theme='oled'] ::-webkit-scrollbar-thumb:hover { background: #444; }
+/* lightweight: no animation or transition work at all */
+[data-theme='oled'] *, [data-theme='oled'] *::before, [data-theme='oled'] *::after { animation: none !important; transition: none !important; }
+
+/* ---------- Retro: NES controller. Beige plastic, charcoal ink, maroon accents, square pixels ---------- */
+[data-theme='retro'] {
+  --font-sans: "Press Start 2P", "Lucida Console", Consolas, "Courier New", monospace;
+  --color-white: #2a2a2a;                       /* every white-on-dark utility becomes charcoal-on-beige, opacities intact */
+  --color-ink: #b9b196; --color-text: #2a2a2a; --color-mute: #5a5546;
+  --color-hover: rgba(42,42,42,.09); --color-line: rgba(42,42,42,.25);
+  --color-accent: #a3202e; --color-brand: #b8323f;
+}
+[data-theme='retro'] body { background: #b9b196; color: #2a2a2a; text-shadow: none; -webkit-font-smoothing: none; letter-spacing: 0; }
+[data-theme='retro'] *, [data-theme='retro'] *::before, [data-theme='retro'] *::after { border-radius: 0 !important; animation: none !important; transition: none !important; }
+[data-theme='retro'] .wp-root { background: repeating-conic-gradient(#b9b196 0 25%, #b3ab90 0 50%) 0 0 / 4px 4px; }   /* dithered beige */
+[data-theme='retro'] .wp-root > * { display: none; }
+[data-theme='retro'] .glass { background: #cbc4a8; -webkit-backdrop-filter: none; backdrop-filter: none; border: 2px solid #3a3a3a; box-shadow: 3px 3px 0 #3a3a3a; }
+[data-theme='retro'] .glass-hover:hover { background: #d6cfb3; border-color: #3a3a3a; box-shadow: 3px 3px 0 #a3202e; }
+[data-theme='retro'] .lens { background: #a3202e; color: #efe9d3; border: 2px solid #3a3a3a; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 3px 3px 0 #3a3a3a; }
+[data-theme='retro'] .lens svg { color: #efe9d3; }
+[data-theme='retro'] .menu-pop { background: #cbc4a8; -webkit-backdrop-filter: none; backdrop-filter: none; border: 2px solid #3a3a3a; box-shadow: 4px 4px 0 #3a3a3a; }
+[data-theme='retro'] .blue-glass { background: #a3202e; color: #efe9d3 !important; border: 2px solid #3a3a3a; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 2px 2px 0 #3a3a3a; text-shadow: none; }
+[data-theme='retro'] .backdrop-blur-sm, [data-theme='retro'] .backdrop-blur-md { -webkit-backdrop-filter: none; backdrop-filter: none; }
+[data-theme='retro'] [class*="bg-black/"] { color: #efe9d3; }                 /* dark overlays (play buttons, badges) keep light icons */
+[data-theme='retro'] [class*="hover:text-white"]:hover { color: #000; }
+[data-theme='retro'] img { filter: sepia(.3) saturate(1.1) contrast(1.06); image-rendering: pixelated; }
+[data-theme='retro'] svg[aria-label="Equalizer"] { background: #aea78c; filter: hue-rotate(150deg); }
+[data-theme='retro'] svg[aria-label="Equalizer"] text { fill: #2a2a2a; }
+[data-theme='retro'] svg[aria-label="Equalizer"] path[stroke="#ffffff"] { stroke: #3a3a3a; }
+[data-theme='retro'] ::-webkit-scrollbar-track { background: #aea78c; }
+[data-theme='retro'] ::-webkit-scrollbar-thumb { background: #3a3a3a; border: 3px solid #aea78c; }
+[data-theme='retro'] ::-webkit-scrollbar-thumb:hover { background: #a3202e; }
+[data-theme='retro'] input[type="range"].slider { --fill: #3a3a3a; }
+[data-theme='retro'] input[type="range"].slider:hover, [data-theme='retro'] input[type="range"].slider:active { --fill: #a3202e; }
+[data-theme='retro'] input[type="range"].slider::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--fill) var(--p, 0%), #948d74 var(--p, 0%)); }
+[data-theme='retro'] input[type="range"].slider::-webkit-slider-thumb { background: #a3202e; }
+[data-theme='retro'] .hdr-glow { display: none; }                    /* no header gradient */
+[data-theme='retro'] main.glass { background: #817c6a; }          /* the middle panel is grey, like the controller's faceplate */
+[data-theme='retro'] main.glass ::-webkit-scrollbar-track { background: #6e6a5b; }
+[data-theme='retro'] main.glass ::-webkit-scrollbar-thumb { border-color: #6e6a5b; }
+[data-theme='retro'] body { filter: contrast(1.1); }                /* +10% contrast over the whole app */
+
+/* easter egg: hover the Triad logo and its bars slide about like an equalizer */
+@keyframes logo-slide { 0% { transform: translateX(0) } 30% { transform: translateX(calc(var(--dir) * 26px)) } 60% { transform: translateX(calc(var(--dir) * -12px)) } 82% { transform: translateX(calc(var(--dir) * 5px)) } 100% { transform: translateX(0) } }
+.logo-bar { transform-box: fill-box; }
+.logo:hover .logo-bar { animation: logo-slide .85s cubic-bezier(.3,.7,.3,1) calc(var(--d) * 55ms) both; }
+[data-theme='oled'] .logo:hover .logo-bar, [data-theme='retro'] .logo:hover .logo-bar { animation: logo-slide .85s cubic-bezier(.3,.7,.3,1) calc(var(--d) * 55ms) both !important; }   /* the egg ignores "no animation" themes */
+
+/* lyrics: the text simply gets fainter toward the top and bottom edges (a mask, so no overlay edges or lines) */
+.lyric-fade {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,.08) 10px, rgba(0,0,0,.3) 34px, rgba(0,0,0,.65) 60px, #000 92px, #000 calc(100% - 150px), rgba(0,0,0,.65) calc(100% - 100px), rgba(0,0,0,.3) calc(100% - 60px), rgba(0,0,0,.08) calc(100% - 22px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, rgba(0,0,0,.08) 10px, rgba(0,0,0,.3) 34px, rgba(0,0,0,.65) 60px, #000 92px, #000 calc(100% - 150px), rgba(0,0,0,.65) calc(100% - 100px), rgba(0,0,0,.3) calc(100% - 60px), rgba(0,0,0,.08) calc(100% - 22px), transparent 100%);
+}
+
+/* backend switcher under the logo: fades in/out, darker, and the two marks trade places on click */
+.bk-top, .bk-item > * { transition: transform .42s cubic-bezier(.5,0,.2,1), opacity .32s ease; }
+.bk-in { animation: bk-in .45s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes bk-in { from { opacity: 0; transform: translateY(-14px) scale(.85) } to { opacity: 1; transform: none } }
+.bk-drop {
+  position: absolute; left: 50%; top: calc(100% - 2px); width: 52px; margin-left: -26px; padding: 6px 4px 8px; border-radius: 16px; z-index: 50;
+  background: linear-gradient(to bottom, rgba(6,6,10,.94), rgba(6,6,10,.6)); box-shadow: 0 10px 28px rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.07);
+  opacity: 0; transform: translateY(-8px) scale(.94); transform-origin: top center; pointer-events: none;
+  transition: opacity .22s ease, transform .26s cubic-bezier(.2,.8,.2,1);
+}
+.bk-drop[data-open] { opacity: 1; transform: none; pointer-events: auto; }
+/* swap: the top mark sinks into the dropdown while the dropdown's mark rises into the top spot */
+.bk-in[data-swap] .bk-top { transform: translateY(56px) scale(.9); opacity: 0; }
+.bk-drop[data-swap] .bk-item > * { transform: translateY(-56px) scale(1.05); }
+.bk-drop[data-swap] { opacity: 0; transition-delay: 0s, 0s; transition-duration: .42s; }

@@ -1,0 +1,10 @@
+appId: dev.you.triad
+productName: Triad
+directories: { output: dist }
+files: ['out/**', 'resources/**', 'package.json']
+asarUnpack: ['node_modules/@ghostery/**']   # lets the adblock preload be required from disk
+win:
+  artifactName: Triad-Setup-${version}.${ext}
+  target: [{ target: nsis, arch: [x64] }]
+  icon: build/icon.ico
+nsis: { oneClick: false, allowToChangeInstallationDirectory: true }

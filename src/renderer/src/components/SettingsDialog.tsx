@@ -1,0 +1,179 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { Check, RotateCcw, X } from 'lucide-react'
+import type { MainSettings } from '@shared/types'
+import { THEMES, useSettings } from '@/lib/settings'
+import { Equalizer } from './Equalizer'
+
+function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${on ? 'bg-accent' : 'bg-white/20'}`}>
+      <span className={`absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200 ${on ? 'translate-x-5' : ''}`} />
+    </button>
+  )
+}
+
+function Row({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3">
+      <div className="min-w-0">
+        <div className="text-[14.5px] font-medium text-white/90">{title}</div>
+        {hint && <div className="mt-0.5 text-[12.5px] leading-snug text-mute">{hint}</div>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+  <section className="mb-5 last:mb-0">
+    <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-white/45">{title}</h3>
+    <div className="divide-y divide-white/[.08]">{children}</div>
+  </section>
+)
+
+export function SettingsDialog({ onClose }: { onClose: () => void }) {
+  const ui = useSettings()
+  const [main, setMain] = useState<MainSettings | null>(null)
+  const [cleared, setCleared] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
+
+  useEffect(() => { window.ytm.getSettings().then(setMain).catch(() => {}) }, [])
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, [onClose])
+
+  const eqTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const setEq = (eq: number[], final: boolean) => {
+    setMain((m) => (m ? { ...m, eq } : m))
+    clearTimeout(eqTimer.current)
+    if (final) window.ytm.setSettings({ eq })
+    else eqTimer.current = setTimeout(() => window.ytm.setSettings({ eq }), 70)       // live while dragging, not on every pixel
+  }
+  const eqOn = main?.eqEnabled ?? true
+  const eqFlat = (main?.eq ?? []).every((g) => g === 0)
+  const [clientId, setClientId] = useState('')
+  useEffect(() => { if (main) setClientId((c) => c || main.discordClientId) }, [main])
+  const idOk = /^\d{15,25}$/.test(clientId.trim())
+
+  const setMainValue = (patch: Partial<MainSettings>) => {
+    setMain((m) => (m ? { ...m, ...patch } : m))                 // instant, then confirmed by the main process
+    window.ytm.setSettings(patch).then(setMain).catch(() => {})
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[200] grid place-items-center bg-black/50 p-6 backdrop-blur-sm" onMouseDown={onClose}>
+      <div role="dialog" aria-modal="true" aria-label="Settings" onMouseDown={(e) => e.stopPropagation()}
+        className="menu-pop max-h-[85vh] w-full max-w-[520px] overflow-y-auto rounded-[28px] p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-[22px] font-bold tracking-tight">Settings</h2>
+          <button onClick={onClose} aria-label="Close settings" className="grid size-8 place-items-center rounded-full text-mute hover:bg-white/10 hover:text-white"><X size={18} /></button>
+        </div>
+
+        <Section title="Appearance">
+          <Row title="Theme" hint="Triad is the default. Vista is a glossy Windows Aero look. OLED is pure black, flat and light. Retro is an old NES / Famicom style in beige, charcoal and maroon.">
+            <div className="flex rounded-full bg-white/10 p-0.5" role="radiogroup" aria-label="Theme">
+              {THEMES.map((t) => (
+                <button key={t.id} role="radio" aria-checked={ui.theme === t.id} onClick={() => ui.set({ theme: t.id })}
+                  className={`h-7 rounded-full px-3 text-[13px] font-semibold transition-colors ${ui.theme === t.id ? 'blue-glass' : 'text-white/70 hover:text-white'}`}>{t.label}</button>
+              ))}
+            </div>
+          </Row>
+          <Row title="Interface size" hint="Zoom the whole app in or out.">
+            <div className="flex items-center gap-3">
+              <input type="range" className="slider w-36" aria-label="Interface size" min={0.7} max={1.5} step={0.05} value={ui.zoom}
+                style={{ ['--p' as string]: `${((ui.zoom - 0.7) / 0.8) * 100}%` }} onChange={(e) => ui.set({ zoom: Math.round(+e.target.value * 100) / 100 })} />
+              <span className="w-11 text-right text-[13px] tabular-nums text-mute">{Math.round(ui.zoom * 100)}%</span>
+              <button onClick={() => ui.set({ zoom: 1 })} disabled={ui.zoom === 1}
+                className="h-7 rounded-full bg-white/10 px-3 text-[12.5px] font-semibold text-white/80 transition-colors hover:bg-white/15 hover:text-white disabled:pointer-events-none disabled:opacity-40">Reset</button>
+            </div>
+          </Row>
+          <Row title="Artwork background" hint="A soft blur of the album cover behind the app.">
+            <Switch label="Artwork background" on={ui.wallpaper} onChange={(v) => ui.set({ wallpaper: v })} />
+          </Row>
+          <Row title="Lyrics panel" hint="Show the lyrics column on the right.">
+            <Switch label="Lyrics panel" on={ui.lyricsPanel} onChange={(v) => ui.set({ lyricsPanel: v })} />
+          </Row>
+          <Row title="Lyrics text size">
+            <div className="flex rounded-full bg-white/10 p-0.5" role="radiogroup" aria-label="Lyrics text size">
+              {(['S', 'M', 'L'] as const).map((sz) => (
+                <button key={sz} role="radio" aria-checked={ui.lyricsSize === sz} onClick={() => ui.set({ lyricsSize: sz })}
+                  className={`h-7 w-9 rounded-full text-[13px] font-semibold transition-colors ${ui.lyricsSize === sz ? 'blue-glass' : 'text-white/70 hover:text-white'}`}>{sz}</button>
+              ))}
+            </div>
+          </Row>
+          <Row title="Synced lyrics" hint="Highlight and scroll to the line being sung.">
+            <Switch label="Synced lyrics" on={ui.lyricsSync} onChange={(v) => ui.set({ lyricsSync: v })} />
+          </Row>
+        </Section>
+
+        <Section title="Equalizer">
+          <div className="py-3">
+            <div className="mb-3 flex items-center justify-end gap-2">
+              <button onClick={() => setEq([0, 0, 0, 0, 0, 0, 0, 0], true)} disabled={eqFlat}
+                className="flex h-8 items-center gap-1.5 rounded-full bg-white/10 pl-2.5 pr-3 text-[12.5px] font-semibold text-white/80 transition-colors hover:bg-white/15 hover:text-white disabled:pointer-events-none disabled:opacity-40">
+                <RotateCcw size={14} strokeWidth={2.4} />Reset
+              </button>
+              {/* same look as the lyrics sync switch: soft green ✓ = on, soft red ✕ = off */}
+              <button onClick={() => setMainValue({ eqEnabled: !eqOn })} aria-pressed={eqOn} title={eqOn ? 'Equalizer: on' : 'Equalizer: off'}
+                className={`flex h-8 items-center gap-1.5 rounded-full pl-2.5 pr-3 text-[12.5px] font-semibold ring-1 backdrop-blur-md transition-colors ${
+                  eqOn ? 'bg-[rgba(100,190,140,.16)] text-[#8fd0ae] ring-[rgba(100,190,140,.32)] hover:bg-[rgba(100,190,140,.24)]'
+                       : 'bg-[rgba(214,110,110,.16)] text-[#e39b9b] ring-[rgba(214,110,110,.32)] hover:bg-[rgba(214,110,110,.24)]'}`}>
+                {eqOn ? <Check size={15} strokeWidth={2.8} /> : <X size={15} strokeWidth={2.8} />}{eqOn ? 'On' : 'Off'}
+              </button>
+            </div>
+            <Equalizer gains={main?.eq ?? [0, 0, 0, 0, 0, 0, 0, 0]} onChange={setEq} disabled={!eqOn} />
+            <p className="mt-2.5 text-[12.5px] leading-snug text-mute">Drag the surface to shape the sound. Applies to everything Triad plays. Turn it off to hear the original sound; your curve is kept.</p>
+          </div>
+        </Section>
+
+        <Section title="Playback & privacy">
+          <Row title="Track listening history" hint="Powers “Your most played” on the home screen. Stays on this computer.">
+            <Switch label="Track listening history" on={main?.trackHistory ?? true} onChange={(v) => setMainValue({ trackHistory: v })} />
+          </Row>
+          <Row title="Clear listening history" hint="Resets your most played songs and artists.">
+            {confirmClear ? (
+              <div className="flex gap-2">
+                <button onClick={() => { window.ytm.clearHistory().then(() => { setCleared(true); setConfirmClear(false) }) }}
+                  className="h-8 rounded-full bg-[rgba(214,110,110,.25)] px-3 text-[13px] font-semibold text-[#f0aaaa] hover:bg-[rgba(214,110,110,.38)]">Clear</button>
+                <button onClick={() => setConfirmClear(false)} className="h-8 rounded-full bg-white/10 px-3 text-[13px] hover:bg-white/15">Keep</button>
+              </div>
+            ) : (
+              <button onClick={() => { setCleared(false); setConfirmClear(true) }}
+                className="h-8 rounded-full bg-white/10 px-3.5 text-[13px] font-medium hover:bg-white/15">{cleared ? 'Cleared ✓' : 'Clear…'}</button>
+            )}
+          </Row>
+          <Row title="Global shortcuts" hint="Ctrl+Alt+Space play/pause · Ctrl+Alt+←/→ previous/next · Ctrl+Alt+↑/↓ volume. Works while Triad is in the background.">
+            <Switch label="Global shortcuts" on={main?.hotkeys ?? true} onChange={(v) => setMainValue({ hotkeys: v })} />
+          </Row>
+        </Section>
+
+        <Section title="Discord">
+          <Row title="Show what I'm listening to" hint="Displays “Listening to …” on your Discord profile while music plays. Only while Discord is open.">
+            <Switch label="Discord listening status" on={main?.discord ?? false} onChange={(v) => setMainValue({ discord: v })} />
+          </Row>
+          {!main?.discordBuiltIn && <div className="py-3">
+            <label htmlFor="did" className="text-[14.5px] font-medium text-white/90">Discord application ID</label>
+            <input id="did" value={clientId} onChange={(e) => setClientId(e.target.value)} onBlur={() => idOk && clientId.trim() !== main?.discordClientId && setMainValue({ discordClientId: clientId.trim() })}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} inputMode="numeric" placeholder="e.g. 123456789012345678" spellCheck={false}
+              className="mt-2 h-10 w-full rounded-full bg-white/10 px-4 text-[14px] outline-none placeholder:text-mute focus:ring-2 focus:ring-accent" />
+            <p className={`mt-2 text-[12.5px] leading-snug ${clientId && !idOk ? 'text-[#e69a9a]' : 'text-mute'}`}>
+              {clientId && !idOk ? 'That doesn’t look like an application ID (it’s 17–20 digits).' : <>Create a free app at <button onClick={() => window.ytm.openExternal('https://discord.com/developers/applications')} className="underline hover:text-white">discord.com/developers</button>, name it “Triad” (that name is what friends see), and paste its Application ID here.</>}
+            </p>
+          </div>}
+        </Section>
+
+        <Section title="System">
+          <Row title="Launch at login" hint="Start Triad when you sign in to Windows (installed app only).">
+            <Switch label="Launch at login" on={main?.launchAtLogin ?? false} onChange={(v) => setMainValue({ launchAtLogin: v })} />
+          </Row>
+        </Section>
+
+        <p className="mt-5 text-[12px] text-white/40">Triad · music from YouTube Music, lyrics from Genius &amp; LRCLIB</p>
+      </div>
+    </div>,
+    document.body
+  )
+}

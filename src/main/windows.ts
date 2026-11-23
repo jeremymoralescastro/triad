@@ -73,8 +73,9 @@ export function createUiWindow() {
     backgroundColor: '#000000',
     title: 'Triad',
     icon: ICON,
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 44 },
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 22 } }       // Mac: the usual red/yellow/green buttons, inset into our top bar
+      : { titleBarStyle: 'hidden' as const, titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 44 } }),
     webPreferences: {
       preload: join(__dirname, '../preload/ui.js'),
       contextIsolation: true, nodeIntegration: false,

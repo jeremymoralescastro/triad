@@ -1,4 +1,5 @@
-import { app, BrowserWindow, globalShortcut } from 'electron'
+import { app, BrowserWindow, globalShortcut, nativeImage } from 'electron'
+import { join } from 'path'
 import { createEngineWindow, createScWindow, createUiWindow, markQuitting } from './windows'
 import { wireIpc } from './ipc'
 import { applyLoginItem, getSettings } from './settings'
@@ -14,6 +15,7 @@ if (!app.requestSingleInstanceLock()) app.quit()
 
 app.whenReady().then(async () => {
   app.setAppUserModelId('dev.you.triad') // required for proper Win11 media overlay / notifications
+  if (process.platform === 'darwin') { try { app.dock?.setIcon(nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))) } catch { /* the dock keeps its default icon */ } }   // dev runs show Electron's icon otherwise
   const make = (b: 'ytm' | 'sc') => (b === 'sc' ? createScWindow() : createEngineWindow())
   const start = getSettings().backend === 'sc' ? 'sc' : 'ytm'
   const engine = await make(start)

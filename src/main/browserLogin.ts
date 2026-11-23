@@ -15,6 +15,12 @@ const SIGN_IN_URL =
   'https://accounts.google.com/ServiceLogin?service=youtube&continue=' + encodeURIComponent('https://music.youtube.com/')
 
 export function findBrowser(): string | null {
+  if (process.platform === 'darwin') {
+    const apps = ['Google Chrome', 'Microsoft Edge', 'Brave Browser', 'Chromium']
+    const home = process.env['HOME'] ?? ''
+    const found = apps.flatMap((a) => [`/Applications/${a}.app/Contents/MacOS/${a}`, join(home, 'Applications', `${a}.app`, 'Contents', 'MacOS', a)])
+    return found.find((p) => existsSync(p)) ?? null
+  }
   const pf = process.env['ProgramFiles'] ?? 'C:\\Program Files'
   const pf86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'
   const local = process.env['LOCALAPPDATA'] ?? ''
@@ -27,7 +33,7 @@ export function findBrowser(): string | null {
   ]
   return candidates.find((p) => p && existsSync(p)) ?? null
 }
-export const browserName = (exe: string) => (/edge/i.test(exe) ? 'Microsoft Edge' : 'Chrome')
+export const browserName = (exe: string) => (/edge/i.test(exe) ? 'Microsoft Edge' : /brave/i.test(exe) ? 'Brave' : 'Chrome')
 
 export type SignInResult =
   | { kind: 'cookies'; cookies: RawCookie[] }

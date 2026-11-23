@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v0.1.1 and this builds the Windows installer and publishes it as a GitHub Release.
+# Push a tag like v0.1.3 and this builds the Windows installer and the Mac app, then publishes them as one GitHub Release.
 on:
   push:
     tags: ['v*']
@@ -30,3 +30,24 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  mac:
+    needs: windows            # runs after the Windows job so both upload to the same release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        # the lockfile was made on Windows and lacks the Mac-only native packages, so let npm resolve them fresh
+        run: rm -f package-lock.json && npm install
+      - name: Use the tag as the app version
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+      - name: Build
+        run: npx electron-vite build
+      - name: Package and publish
+        run: npx electron-builder --mac --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'     # no Apple certificate: build unsigned

@@ -2,3 +2,5 @@ node_modules
 out
 dist
 cookies.txt
+.DS_Store
+*.tsbuildinfo
